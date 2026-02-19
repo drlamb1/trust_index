@@ -1,0 +1,60 @@
+# Environment — never commit secrets
+.env
+.env.*
+!.env.example
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+.venv/
+venv/
+env/
+
+# pytest / coverage
+.pytest_cache/
+.coverage
+htmlcov/
+*.log
+
+# Alembic
+# (versions/ is committed, but not generated artifacts)
+
+# Node / React frontend (Phase 5)
+node_modules/
+frontend/dist/
+frontend/.vite/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Celery
+celerybeat-schedule
+celerybeat-schedule.db
+
+# Secrets / keys
+*.pem
+*.key
+credentials.json
+
+# Claude Code
+.claude/
+
+# Data files (price history, filing cache — can be large)
+*.db
+*.sqlite
+*.sqlite3

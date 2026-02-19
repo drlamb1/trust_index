@@ -1,0 +1,104 @@
+# =============================================================================
+# EdgeFinder — Ticker Universe Configuration
+# =============================================================================
+#
+# The system manages three categories of tickers:
+#
+#   universe.sp500: true       → Auto-fetches current S&P 500 constituents weekly
+#                                from Wikipedia. Additions/removals are tracked.
+#
+#   universe.sp500_additions   → Recently added to S&P 500 (momentum signal)
+#
+#   universe.custom            → Individual tickers to track regardless of index
+#
+#   watchlist                  → Tickers with associated theses, notes, and
+#                                priority for the daily briefing
+#
+# CLI: edgefinder ticker add PLTR --thesis ai_defense --notes "Gov AI contracts"
+# =============================================================================
+
+universe:
+  # Auto-fetches and maintains S&P 500 constituent list
+  # Source: Wikipedia (updated weekly by Celery Beat job)
+  sp500: true
+
+  # Additional indexes to track (future)
+  # russell_1000: false
+  # nasdaq_100: false
+
+  # Custom tickers beyond the index
+  custom:
+    - PLTR   # Palantir — AI/defense analytics
+    - RKLB   # Rocket Lab — space launch
+    - SMR    # NuScale Power — small modular reactors
+    - OKLO   # Oklo — advanced fission
+    - JOBY   # Joby Aviation — eVTOL
+    - LUNR   # Intuitive Machines — lunar logistics
+    - RR     # Rolls-Royce — nuclear + aero engines
+
+watchlist:
+  - symbol: NVDA
+    thesis: ai_infrastructure
+    priority: 1
+    added: "2025-01-15"
+    notes: "Dominant GPU supplier for AI training + inference. Watch data center revenue mix."
+
+  - symbol: MSFT
+    thesis: ai_infrastructure
+    priority: 2
+    added: "2025-01-15"
+    notes: "Azure + OpenAI investment. Watch Copilot monetization and Azure growth rate."
+
+  - symbol: AAPL
+    thesis: null
+    priority: 3
+    added: "2025-01-15"
+    notes: "Watch iPhone 17 cycle, Services margin, and Vision Pro adoption."
+
+  - symbol: META
+    thesis: ai_infrastructure
+    priority: 2
+    added: "2025-01-15"
+    notes: "LLaMA moat, Reels monetization, Ray-Ban AI glasses. Watch Reality Labs burn."
+
+  - symbol: GOOGL
+    thesis: ai_infrastructure
+    priority: 2
+    added: "2025-01-15"
+    notes: "Gemini vs GPT-4. Watch Search revenue resilience and YouTube monetization."
+
+  - symbol: AMZN
+    thesis: ai_infrastructure
+    priority: 2
+    added: "2025-01-15"
+    notes: "AWS Trainium chips, Bedrock adoption. Watch AWS operating margin expansion."
+
+  - symbol: PLTR
+    thesis: ai_defense
+    priority: 1
+    added: "2025-01-15"
+    notes: "AIP enterprise adoption, gov contracts. Watch US commercial revenue growth."
+
+  - symbol: SMR
+    thesis: energy_transition
+    priority: 1
+    added: "2025-02-01"
+    notes: "NuScale SMR — first NRC-approved SMR design. Watch DOE loan status."
+
+  - symbol: VST
+    thesis: energy_transition
+    priority: 2
+    added: "2025-02-01"
+    notes: "Largest independent power producer. Nuclear + gas. Watch data center PPA deals."
+
+  - symbol: CEG
+    thesis: energy_transition
+    priority: 2
+    added: "2025-02-01"
+    notes: "Constellation Energy. Nuclear renaissance play. Three Mile Island restart."
+
+  - symbol: RKLB
+    thesis: space_economy
+    priority: 1
+    added: "2025-01-15"
+    notes: "Electron + Neutron. Watch Neutron development milestones and backlog growth."

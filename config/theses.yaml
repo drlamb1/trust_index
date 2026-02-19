@@ -1,0 +1,185 @@
+# =============================================================================
+# EdgeFinder — Investment Thesis Definitions
+# =============================================================================
+#
+# Theses drive auto-discovery: the system scans the full ticker universe weekly
+# and surfaces tickers that match your thesis based on keyword density in SEC
+# filings (MD&A section) AND quantitative financial criteria.
+#
+# For each thesis:
+#   keywords:           Searched in the MD&A/Business sections of 10-K/10-Q.
+#                       Score increases with keyword density and recency.
+#
+#   financial_criteria: Quantitative screens against extracted financial metrics.
+#                       All criteria must be satisfied (AND logic).
+#                       Omit a field to skip that filter.
+#
+#   sector_filter:      If provided, only tickers in these GICS sectors qualify.
+#
+#   market_cap_min/max: In USD. Omit for no limit.
+#
+#   exclusions:         Ticker symbols to always exclude from this thesis.
+#
+# CLI: edgefinder thesis scan ai_infrastructure
+#      edgefinder thesis performance
+# =============================================================================
+
+theses:
+
+  # ---------------------------------------------------------------------------
+  ai_infrastructure:
+    name: "AI Infrastructure Buildout"
+    description: >
+      Companies providing the picks and shovels for the AI compute buildout:
+      GPU/ASIC manufacturers, hyperscalers, data center operators, networking
+      (InfiniBand, Ethernet), power (UPS, cooling), and software orchestration.
+    keywords:
+      - "artificial intelligence"
+      - "machine learning"
+      - "data center"
+      - "GPU"
+      - "inference"
+      - "training compute"
+      - "large language model"
+      - "generative AI"
+      - "hyperscale"
+      - "accelerated computing"
+      - "NVIDIA"
+      - "custom silicon"
+    financial_criteria:
+      revenue_growth_yoy_min: 12       # % YoY revenue growth
+      gross_margin_min: 35             # %
+      rd_spend_pct_min: 8              # R&D as % of revenue
+    sector_filter:
+      - "Information Technology"
+      - "Communication Services"
+      - "Industrials"
+      - "Utilities"
+    market_cap_min: 1_000_000_000      # $1B minimum
+    exclusions:
+      - "INTC"   # Intel — losing market share, not a pure-play
+
+  # ---------------------------------------------------------------------------
+  ai_defense:
+    name: "AI-Enabled Defense & Intelligence"
+    description: >
+      Companies applying AI/ML to defense, intelligence, and national security:
+      autonomous systems, battlefield analytics, satellite ISR, cyber, and
+      government AI platforms. Focus on companies with classified contract exposure.
+    keywords:
+      - "department of defense"
+      - "national security"
+      - "intelligence community"
+      - "autonomous"
+      - "AI platform"
+      - "surveillance"
+      - "cyber"
+      - "ISR"
+      - "JADC2"
+      - "artificial intelligence"
+    financial_criteria:
+      revenue_growth_yoy_min: 10
+      gross_margin_min: 30
+    sector_filter:
+      - "Industrials"
+      - "Information Technology"
+    market_cap_min: 500_000_000        # $500M minimum
+
+  # ---------------------------------------------------------------------------
+  energy_transition:
+    name: "Energy Transition & Grid Modernization"
+    description: >
+      Nuclear renaissance (fission + fusion), grid modernization, energy storage,
+      and electrification infrastructure. The AI buildout is driving unprecedented
+      power demand — these companies benefit directly.
+    keywords:
+      - "nuclear"
+      - "small modular reactor"
+      - "SMR"
+      - "grid modernization"
+      - "energy storage"
+      - "lithium"
+      - "battery"
+      - "power purchase agreement"
+      - "data center power"
+      - "clean energy"
+      - "transmission"
+      - "electrification"
+    financial_criteria:
+      revenue_growth_yoy_min: 5
+    sector_filter:
+      - "Utilities"
+      - "Industrials"
+      - "Energy"
+      - "Materials"
+    market_cap_min: 500_000_000
+
+  # ---------------------------------------------------------------------------
+  space_economy:
+    name: "Commercial Space Economy"
+    description: >
+      Launch providers, satellite constellations, in-space manufacturing, and
+      downstream applications. Early-stage, high-risk, high-upside. Focus on
+      companies with recurring revenue or contracted backlogs.
+    keywords:
+      - "launch vehicle"
+      - "satellite"
+      - "orbit"
+      - "payload"
+      - "space"
+      - "rocket"
+      - "lunar"
+      - "constellation"
+      - "earth observation"
+    financial_criteria:
+      revenue_growth_yoy_min: 20
+    sector_filter:
+      - "Industrials"
+      - "Information Technology"
+    market_cap_min: 200_000_000
+    market_cap_max: 20_000_000_000     # $20B max — avoid Boeing/Lockheed
+
+  # ---------------------------------------------------------------------------
+  value_reversion:
+    name: "Deep Value Mean Reversion"
+    description: >
+      Quality businesses temporarily out of favor, trading below intrinsic value.
+      Pure quantitative screen — no keyword filter. Targets stocks where the market
+      is pricing in permanent impairment but fundamentals remain solid.
+    keywords: []   # No keyword filter — pure quant screen
+    financial_criteria:
+      pe_ratio_max: 14
+      price_to_book_max: 2.0
+      fcf_yield_min: 6                 # FCF yield % (FCF / market cap)
+      debt_to_equity_max: 1.5
+      roe_min: 12                      # Return on equity %
+      dividend_yield_min: 1.5          # % (optional but positive signal)
+    sector_filter: []                  # All sectors eligible
+    market_cap_min: 2_000_000_000      # $2B — large enough to be liquid
+
+  # ---------------------------------------------------------------------------
+  software_as_monopoly:
+    name: "Durable Software Moats"
+    description: >
+      Subscription software businesses with mission-critical workflows, high
+      switching costs, and net revenue retention > 110%. Willing to wait for
+      multiple expansion when growth decelerates but fundamentals remain intact.
+    keywords:
+      - "annual recurring revenue"
+      - "ARR"
+      - "net revenue retention"
+      - "net dollar retention"
+      - "platform"
+      - "ecosystem"
+      - "switching costs"
+      - "enterprise"
+      - "subscription"
+    financial_criteria:
+      revenue_growth_yoy_min: 10
+      gross_margin_min: 65
+      net_revenue_retention_min: 110   # % (if available)
+      rd_spend_pct_min: 15
+    sector_filter:
+      - "Information Technology"
+      - "Communication Services"
+    market_cap_min: 1_000_000_000
