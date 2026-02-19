@@ -28,9 +28,7 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Database — Neon PostgreSQL
     # -------------------------------------------------------------------------
-    database_url: str = Field(
-        description="Async PostgreSQL URL (postgresql+asyncpg://...)"
-    )
+    database_url: str = Field(description="Async PostgreSQL URL (postgresql+asyncpg://...)")
 
     # -------------------------------------------------------------------------
     # Redis — Upstash (production) or local Docker (development)
@@ -129,6 +127,7 @@ class Settings(BaseSettings):
     def validate_edgar_user_agent(cls, v: str) -> str:
         if "contact@example.com" in v or not v.strip():
             import warnings
+
             warnings.warn(
                 "EDGAR_USER_AGENT is using the placeholder email. "
                 "Set EDGAR_USER_AGENT to 'AppName/Version youremail@domain.com' "

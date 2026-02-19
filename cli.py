@@ -20,12 +20,8 @@ Install CLI as a command (optional):
 from __future__ import annotations
 
 import asyncio
-import logging
-import sys
-from typing import Optional
 
 import typer
-from rich import print as rprint
 from rich.console import Console
 from rich.table import Table
 
@@ -50,6 +46,7 @@ console = Console()
 # Shared async runner
 # ---------------------------------------------------------------------------
 
+
 def run(coro):
     """Run an async coroutine from a sync CLI command."""
     return asyncio.run(coro)
@@ -58,6 +55,7 @@ def run(coro):
 # ---------------------------------------------------------------------------
 # init — Bootstrap the system
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def init(
@@ -74,9 +72,9 @@ def init(
     console.print("  → Running database migrations...")
     try:
         import subprocess
+
         result = subprocess.run(
-            ["alembic", "upgrade", "head"],
-            capture_output=True, text=True, check=True
+            ["alembic", "upgrade", "head"], capture_output=True, text=True, check=True
         )
         console.print(f"    ✓ Migrations complete: {result.stdout.strip() or 'up to date'}")
     except subprocess.CalledProcessError as e:
@@ -95,6 +93,7 @@ def init(
     if not skip_sp500:
         console.print("  → Fetching S&P 500 constituents from Wikipedia...")
         from scheduler.tasks import task_sync_sp500
+
         result = task_sync_sp500.apply_async()
         outcome = result.get(timeout=120)
         console.print(
@@ -111,10 +110,11 @@ def init(
 async def _sync_theses() -> None:
     """Sync thesis definitions from theses.yaml into the database."""
     import yaml
+    from sqlalchemy import select
+
     from config.settings import THESES_FILE
     from core.database import AsyncSessionLocal
     from core.models import Thesis
-    from sqlalchemy import select
 
     with open(THESES_FILE) as f:
         data = yaml.safe_load(f)
@@ -145,12 +145,14 @@ async def _sync_theses() -> None:
 
 async def _load_tickers_from_yaml() -> None:
     """Load custom tickers and watchlist from tickers.yaml into the database."""
-    import yaml
     from datetime import date
+
+    import yaml
+    from sqlalchemy import select
+
     from config.settings import TICKERS_FILE
     from core.database import AsyncSessionLocal
     from core.models import Ticker
-    from sqlalchemy import select
 
     with open(TICKERS_FILE) as f:
         data = yaml.safe_load(f)
@@ -185,27 +187,33 @@ async def _load_tickers_from_yaml() -> None:
             processed += 1
 
         await session.commit()
-        console.print(f"    ✓ Loaded {len(custom)} custom tickers, {len(watchlist)} watchlist tickers")
+        console.print(
+            f"    ✓ Loaded {len(custom)} custom tickers, {len(watchlist)} watchlist tickers"
+        )
 
 
 # ---------------------------------------------------------------------------
 # ticker — Universe management
 # ---------------------------------------------------------------------------
 
+
 @ticker_app.command("add")
 def ticker_add(
     symbol: str = typer.Argument(..., help="Ticker symbol (e.g. PLTR)"),
-    thesis: Optional[str] = typer.Option(None, "--thesis", help="Thesis slug (e.g. ai_defense)"),
-    notes: Optional[str] = typer.Option(None, "--notes", help="Free-text notes"),
+    thesis: str | None = typer.Option(None, "--thesis", help="Thesis slug (e.g. ai_defense)"),
+    notes: str | None = typer.Option(None, "--notes", help="Free-text notes"),
     watchlist: bool = typer.Option(True, "--watchlist/--no-watchlist", help="Add to watchlist"),
     priority: int = typer.Option(5, "--priority", help="Watchlist priority (1=highest)"),
 ):
     """Add a ticker to the universe."""
+
     async def _add():
         from datetime import date
+
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
-        from sqlalchemy import select
 
         symbol_upper = symbol.upper()
         async with AsyncSessionLocal() as session:
@@ -241,13 +249,17 @@ def ticker_add(
 @ticker_app.command("remove")
 def ticker_remove(
     symbol: str = typer.Argument(..., help="Ticker symbol to remove"),
-    hard: bool = typer.Option(False, "--hard", help="Hard delete from DB (default: soft deactivate)"),
+    hard: bool = typer.Option(
+        False, "--hard", help="Hard delete from DB (default: soft deactivate)"
+    ),
 ):
     """Remove a ticker from active tracking."""
+
     async def _remove():
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
-        from sqlalchemy import select
 
         symbol_upper = symbol.upper()
         async with AsyncSessionLocal() as session:
@@ -276,16 +288,18 @@ def ticker_remove(
 
 @ticker_app.command("list")
 def ticker_list(
-    sector: Optional[str] = typer.Option(None, "--sector", help="Filter by sector"),
+    sector: str | None = typer.Option(None, "--sector", help="Filter by sector"),
     watchlist_only: bool = typer.Option(False, "--watchlist", help="Show watchlist only"),
     sp500_only: bool = typer.Option(False, "--sp500", help="Show S&P 500 only"),
     limit: int = typer.Option(50, "--limit", help="Max results"),
 ):
     """List tickers in the universe."""
+
     async def _list():
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
             stmt = select(Ticker).where(Ticker.is_active.is_(True))
@@ -296,8 +310,7 @@ def ticker_list(
             if sp500_only:
                 stmt = stmt.where(Ticker.in_sp500.is_(True))
             stmt = stmt.order_by(
-                Ticker.watchlist_priority.asc().nullslast(),
-                Ticker.symbol.asc()
+                Ticker.watchlist_priority.asc().nullslast(), Ticker.symbol.asc()
             ).limit(limit)
 
             result = await session.execute(stmt)
@@ -330,18 +343,21 @@ def ticker_list(
 # ingest — Data ingestion
 # ---------------------------------------------------------------------------
 
+
 @ingest_app.command("prices")
 def ingest_prices(
-    symbol: Optional[str] = typer.Argument(None, help="Single ticker symbol (default: all)"),
+    symbol: str | None = typer.Argument(None, help="Single ticker symbol (default: all)"),
     days: int = typer.Option(365, "--days", "-d", help="Number of days to fetch"),
     concurrency: int = typer.Option(5, "--concurrency", "-c", help="Concurrent fetches"),
 ):
     """Fetch and store OHLCV price data."""
+
     async def _ingest():
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
         from ingestion.price_data import fetch_and_store_prices, fetch_and_store_prices_batch
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
             if symbol:
@@ -379,7 +395,7 @@ def ingest_prices(
 
 @ingest_app.command("filings")
 def ingest_filings(
-    ticker: Optional[str] = typer.Argument(None, help="Single ticker (default: all)"),
+    ticker: str | None = typer.Argument(None, help="Single ticker (default: all)"),
     filing_type: str = typer.Option("10-K", "--type", "-t", help="Filing type (10-K, 10-Q, 8-K)"),
     years: int = typer.Option(1, "--years", help="Years of filings to fetch"),
 ):
@@ -393,6 +409,7 @@ def ingest_filings(
 # ---------------------------------------------------------------------------
 # run — Full pipeline
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def run_pipeline(
@@ -411,6 +428,7 @@ def run_pipeline(
         return
 
     from scheduler.orchestrator import run_daily_eod_pipeline
+
     result = run_daily_eod_pipeline()
     console.print(f"[green]✓ Pipeline started (task ID: {result.id})[/green]")
     console.print("Monitor with: celery -A scheduler.tasks flower")
@@ -419,6 +437,7 @@ def run_pipeline(
 # ---------------------------------------------------------------------------
 # serve — Launch dashboard
 # ---------------------------------------------------------------------------
+
 
 @app.command()
 def serve(
@@ -429,11 +448,14 @@ def serve(
     """Launch the EdgeFinder web dashboard."""
     import uvicorn
 
-    console.print(f"[bold green]Starting EdgeFinder dashboard on http://localhost:{port}[/bold green]")
+    console.print(
+        f"[bold green]Starting EdgeFinder dashboard on http://localhost:{port}[/bold green]"
+    )
     console.print("Press Ctrl+C to stop.")
 
     try:
-        from api.app import create_app
+        import api.app  # noqa: F401 — verify module exists before uvicorn loads it
+
         uvicorn.run(
             "api.app:create_app",
             factory=True,
@@ -453,10 +475,11 @@ def serve(
 # briefing — Generate daily briefing
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def briefing(
     dry_run: bool = typer.Option(True, "--dry-run/--send", help="Print without delivering"),
-    date_str: Optional[str] = typer.Option(None, "--date", help="Date (YYYY-MM-DD, default: today)"),
+    date_str: str | None = typer.Option(None, "--date", help="Date (YYYY-MM-DD, default: today)"),
 ):
     """Generate and optionally deliver the daily briefing. (Phase 4)"""
     console.print("[yellow]Daily briefing generation will be available in Phase 4.[/yellow]")
@@ -466,15 +489,18 @@ def briefing(
 # status — System health check
 # ---------------------------------------------------------------------------
 
+
 @app.command()
 def status():
     """Show system status: DB, Redis, worker counts, last ingestion timestamps."""
+
     async def _status():
         checks = {}
 
         # DB check
         try:
             from core.database import check_db_connection
+
             ok = await check_db_connection()
             checks["database"] = ("✓ Connected", "green") if ok else ("✗ Failed", "red")
         except Exception as e:
@@ -483,7 +509,9 @@ def status():
         # Redis check
         try:
             import redis as redis_lib
+
             from config.settings import settings
+
             # Strip rediss:// scheme for redis-py test
             r = redis_lib.from_url(settings.redis_url, socket_connect_timeout=5)
             r.ping()
@@ -493,9 +521,11 @@ def status():
 
         # Ticker counts
         try:
+            from sqlalchemy import func, select
+
             from core.database import AsyncSessionLocal
             from core.models import Ticker
-            from sqlalchemy import func, select
+
             async with AsyncSessionLocal() as session:
                 result = await session.execute(
                     select(func.count(Ticker.id)).where(Ticker.is_active.is_(True))

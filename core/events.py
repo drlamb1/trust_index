@@ -33,7 +33,6 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import logging
 from typing import Any
 
 import structlog
@@ -125,6 +124,7 @@ event_bus = EventBus()
 # ---------------------------------------------------------------------------
 # Event type constants
 # ---------------------------------------------------------------------------
+
 
 class EventType:
     ALERT = "alert"

@@ -30,6 +30,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import ssl
+
 from celery import Celery
 from celery.schedules import crontab
 
@@ -49,27 +50,22 @@ _ssl_options = {"ssl_cert_reqs": ssl.CERT_NONE} if settings.redis_uses_ssl else 
 celery_app.conf.update(
     broker_url=settings.redis_url,
     result_backend=settings.redis_url,
-
     # SSL for Upstash
     broker_use_ssl=_ssl_options if settings.redis_uses_ssl else None,
     redis_backend_use_ssl=_ssl_options if settings.redis_uses_ssl else None,
-
     # Serialization
     task_serializer="json",
     result_serializer="json",
     accept_content=["json"],
-
     # Reliability
-    task_acks_late=True,                  # Only ack after task completes (not crashes)
-    worker_prefetch_multiplier=1,         # Don't pre-fetch; each task may be long-running
-    task_reject_on_worker_lost=True,      # Re-queue on worker crash
+    task_acks_late=True,  # Only ack after task completes (not crashes)
+    worker_prefetch_multiplier=1,  # Don't pre-fetch; each task may be long-running
+    task_reject_on_worker_lost=True,  # Re-queue on worker crash
     broker_connection_retry_on_startup=True,
-    broker_heartbeat=10,                  # Detect Upstash connection drops
-
+    broker_heartbeat=10,  # Detect Upstash connection drops
     # Timeouts
-    task_soft_time_limit=3600,            # 1 hour soft limit (sends SoftTimeLimitExceeded)
-    task_time_limit=3900,                 # 1h 5min hard kill
-
+    task_soft_time_limit=3600,  # 1 hour soft limit (sends SoftTimeLimitExceeded)
+    task_time_limit=3900,  # 1h 5min hard kill
     # Queue routing
     task_routes={
         "scheduler.tasks.task_fetch_prices": {"queue": "ingestion"},
@@ -95,7 +91,6 @@ celery_app.conf.update(
         "scheduler.tasks.task_send_daily_briefing": {"queue": "delivery"},
         "scheduler.tasks.task_send_weekly_digest": {"queue": "delivery"},
     },
-
     # Default queue for unrouted tasks
     task_default_queue="ingestion",
 )
@@ -105,113 +100,96 @@ celery_app.conf.update(
 # ---------------------------------------------------------------------------
 
 celery_app.conf.beat_schedule = {
-
     # ================================================================
     # INGESTION QUEUE
     # ================================================================
-
     # Intraday price refresh — every 15 min Mon-Fri 2:30-9 PM UTC (9:30 AM-4 PM EST)
     "fetch-intraday-prices": {
         "task": "scheduler.tasks.task_fetch_prices_batch",
         "schedule": crontab(minute="*/15", hour="14-21", day_of_week="1-5"),
         "queue": "ingestion",
     },
-
     # EOD price confirmation — 9 PM UTC (4 PM EST) Mon-Fri
     "fetch-eod-prices": {
         "task": "scheduler.tasks.task_fetch_eod_prices",
         "schedule": crontab(minute=0, hour=21, day_of_week="1-5"),
         "queue": "ingestion",
     },
-
     # S&P 500 constituent sync — weekly on Sunday at 6 AM UTC
     "sync-sp500": {
         "task": "scheduler.tasks.task_sync_sp500",
         "schedule": crontab(minute=0, hour=6, day_of_week=0),
         "queue": "ingestion",
     },
-
     # EDGAR new filings check — every 2 hours Mon-Fri during trading hours
     "fetch-new-filings": {
         "task": "scheduler.tasks.task_fetch_new_filings",
         "schedule": crontab(minute=0, hour="*/2", day_of_week="1-5"),
         "queue": "ingestion",
     },
-
     # News aggregation — every 30 minutes (all week)
     "aggregate-news": {
         "task": "scheduler.tasks.task_aggregate_news",
         "schedule": crontab(minute="*/30"),
         "queue": "ingestion",
     },
-
     # Insider trades (Form 4) — twice daily Mon-Fri
     "fetch-insider-trades": {
         "task": "scheduler.tasks.task_fetch_insider_trades",
         "schedule": crontab(minute=0, hour="8,17", day_of_week="1-5"),
         "queue": "ingestion",
     },
-
     # 13F institutional holdings — Monday 7 AM UTC (quarterly filings but check weekly)
     "fetch-institutional": {
         "task": "scheduler.tasks.task_fetch_institutional",
         "schedule": crontab(minute=0, hour=7, day_of_week=1),
         "queue": "ingestion",
     },
-
     # Earnings calendar sync — daily at 6 AM UTC
     "sync-earnings-calendar": {
         "task": "scheduler.tasks.task_sync_earnings_calendar",
         "schedule": crontab(minute=0, hour=6),
         "queue": "ingestion",
     },
-
     # ================================================================
     # ANALYSIS QUEUE
     # ================================================================
-
     # Technical indicators — 35 min after EOD prices (9:35 PM UTC Mon-Fri)
     "compute-technicals-eod": {
         "task": "scheduler.tasks.task_compute_technicals_batch",
         "schedule": crontab(minute=35, hour=21, day_of_week="1-5"),
         "queue": "analysis",
     },
-
     # Filing analysis — process new filings every 3 hours Mon-Fri
     "analyze-pending-filings": {
         "task": "scheduler.tasks.task_analyze_pending_filings",
         "schedule": crontab(minute=0, hour="*/3", day_of_week="1-5"),
         "queue": "analysis",
     },
-
     # Batch sentiment scoring — hourly at :45 (offset from other jobs)
     "score-news-sentiment": {
         "task": "scheduler.tasks.task_run_sentiment_batch",
         "schedule": crontab(minute=45, hour="*"),
         "queue": "analysis",
     },
-
     # Anomaly detection — 45 min after EOD (9:45 PM UTC Mon-Fri)
     "detect-anomalies": {
         "task": "scheduler.tasks.task_detect_anomalies",
         "schedule": crontab(minute=45, hour=21, day_of_week="1-5"),
         "queue": "analysis",
     },
-
     # Sector rotation — 10 PM UTC Mon-Fri (after technicals complete)
     "compute-sector-rotation": {
         "task": "scheduler.tasks.task_compute_sector_rotation",
         "schedule": crontab(minute=0, hour=22, day_of_week="1-5"),
         "queue": "analysis",
     },
-
     # Thesis matching — 10:30 PM UTC daily
     "match-theses": {
         "task": "scheduler.tasks.task_run_thesis_matching",
         "schedule": crontab(minute=30, hour=22),
         "queue": "analysis",
     },
-
     # Neon DB keepalive — every 3 minutes during market hours to prevent cold starts
     # Neon free tier pauses after 5 min of inactivity
     "db-keepalive": {
@@ -219,43 +197,36 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute="*/3", hour="13-22", day_of_week="1-5"),
         "queue": "analysis",
     },
-
     # ================================================================
     # ALERTS QUEUE
     # ================================================================
-
     # Alert engine — every 15 min Mon-Fri 2-10 PM UTC (market hours + post-market)
     "run-alert-engine": {
         "task": "scheduler.tasks.task_run_alert_engine",
         "schedule": crontab(minute="*/15", hour="14-22", day_of_week="1-5"),
         "queue": "alerts",
     },
-
     # DipScore computation — every 30 min during market hours
     "compute-dip-scores": {
         "task": "scheduler.tasks.task_compute_dip_scores",
         "schedule": crontab(minute="*/30", hour="14-21", day_of_week="1-5"),
         "queue": "alerts",
     },
-
     # Snoozed alert expiry — every 5 minutes
     "check-snoozed-alerts": {
         "task": "scheduler.tasks.task_check_snoozed_alerts",
         "schedule": crontab(minute="*/5"),
         "queue": "alerts",
     },
-
     # ================================================================
     # DELIVERY QUEUE
     # ================================================================
-
     # Daily briefing — 7 AM UTC (2 AM EST, before pre-market opens)
     "send-daily-briefing": {
         "task": "scheduler.tasks.task_send_daily_briefing",
         "schedule": crontab(minute=0, hour=7),
         "queue": "delivery",
     },
-
     # Weekly digest — Sunday 8 PM UTC
     "send-weekly-digest": {
         "task": "scheduler.tasks.task_send_weekly_digest",
@@ -267,6 +238,7 @@ celery_app.conf.beat_schedule = {
 # ---------------------------------------------------------------------------
 # Helper: async task wrapper pattern
 # ---------------------------------------------------------------------------
+
 
 def run_async(coro):
     """
@@ -284,14 +256,17 @@ def run_async(coro):
 # PHASE 1 TASKS — Foundation (prices + technicals)
 # ---------------------------------------------------------------------------
 
+
 @celery_app.task(name="scheduler.tasks.task_fetch_prices", bind=True, max_retries=3)
 def task_fetch_prices(self, ticker_id: int, days: int = 1) -> dict:
     """Fetch price data for a single ticker."""
+
     async def _run():
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
         from ingestion.price_data import fetch_and_store_prices
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Ticker).where(Ticker.id == ticker_id))
@@ -305,22 +280,22 @@ def task_fetch_prices(self, ticker_id: int, days: int = 1) -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_fetch_prices failed for ticker_id=%d: %s", ticker_id, exc)
-        raise self.retry(exc=exc, countdown=60 * (2 ** self.request.retries))
+        raise self.retry(exc=exc, countdown=60 * (2**self.request.retries))
 
 
 @celery_app.task(name="scheduler.tasks.task_fetch_prices_batch")
 def task_fetch_prices_batch(days: int = 1) -> dict:
     """Fetch price data for all active tickers."""
+
     async def _run():
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
         from ingestion.price_data import fetch_and_store_prices_batch
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(Ticker).where(Ticker.is_active.is_(True))
-            )
+            result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
             results = await fetch_and_store_prices_batch(session, list(tickers), days=days)
             return {"total_tickers": len(tickers), "results": results}
@@ -341,12 +316,15 @@ def task_fetch_eod_prices() -> dict:
 @celery_app.task(name="scheduler.tasks.task_sync_sp500")
 def task_sync_sp500() -> dict:
     """Sync S&P 500 constituent list from Wikipedia."""
+
     async def _run():
+        from datetime import date
+
+        from sqlalchemy import select
+
         from core.database import AsyncSessionLocal
         from core.models import Ticker
         from ingestion.price_data import fetch_sp500_symbols
-        from sqlalchemy import select
-        from datetime import date
 
         constituents = await fetch_sp500_symbols()
         if not constituents:
@@ -373,9 +351,7 @@ def task_sync_sp500() -> dict:
                     updated += 1
                 else:
                     # New S&P 500 ticker
-                    result = await session.execute(
-                        select(Ticker).where(Ticker.symbol == symbol)
-                    )
+                    result = await session.execute(select(Ticker).where(Ticker.symbol == symbol))
                     ticker = result.scalar_one_or_none()
                     if ticker:
                         ticker.in_sp500 = True
@@ -416,11 +392,13 @@ def task_sync_sp500() -> dict:
 @celery_app.task(name="scheduler.tasks.task_compute_technicals")
 def task_compute_technicals(ticker_id: int) -> dict:
     """Compute technical indicators for a single ticker."""
+
     async def _run():
+        from sqlalchemy import select
+
+        from analysis.technicals import compute_and_store_technicals
         from core.database import AsyncSessionLocal
         from core.models import Ticker
-        from analysis.technicals import compute_and_store_technicals
-        from sqlalchemy import select
 
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Ticker).where(Ticker.id == ticker_id))
@@ -440,16 +418,16 @@ def task_compute_technicals(ticker_id: int) -> dict:
 @celery_app.task(name="scheduler.tasks.task_compute_technicals_batch")
 def task_compute_technicals_batch() -> dict:
     """Compute technical indicators for all active tickers."""
+
     async def _run():
-        from core.database import AsyncSessionLocal
-        from core.models import Ticker
-        from analysis.technicals import compute_technicals_batch
         from sqlalchemy import select
 
+        from analysis.technicals import compute_technicals_batch
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+
         async with AsyncSessionLocal() as session:
-            result = await session.execute(
-                select(Ticker).where(Ticker.is_active.is_(True))
-            )
+            result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
             results = await compute_technicals_batch(session, list(tickers))
             total = sum(results.values())
@@ -465,9 +443,11 @@ def task_compute_technicals_batch() -> dict:
 @celery_app.task(name="scheduler.tasks.task_db_keepalive")
 def task_db_keepalive() -> dict:
     """Ping the database to prevent Neon cold start latency."""
+
     async def _run():
-        from core.database import AsyncSessionLocal
         from sqlalchemy import text
+
+        from core.database import AsyncSessionLocal
 
         async with AsyncSessionLocal() as session:
             await session.execute(text("SELECT 1"))
@@ -485,6 +465,7 @@ def task_db_keepalive() -> dict:
 # These are stubs that will be fully implemented in later phases.
 # Defined here so the Beat schedule can reference them without import errors.
 # ---------------------------------------------------------------------------
+
 
 @celery_app.task(name="scheduler.tasks.task_fetch_new_filings")
 def task_fetch_new_filings() -> dict:

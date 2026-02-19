@@ -22,8 +22,7 @@ Usage:
 from __future__ import annotations
 
 import logging
-from datetime import date, datetime, timedelta
-from typing import Optional
+from datetime import date, timedelta
 
 import numpy as np
 import pandas as pd
@@ -38,6 +37,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Indicator computation
 # ---------------------------------------------------------------------------
+
 
 def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     """
@@ -55,10 +55,9 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     # pandas-ta expects specific column names
     df = df.copy()
-    df = df.rename(columns={
-        "open": "Open", "high": "High", "low": "Low",
-        "close": "Close", "volume": "Volume"
-    })
+    df = df.rename(
+        columns={"open": "Open", "high": "High", "low": "Low", "close": "Close", "volume": "Volume"}
+    )
 
     # --- Moving Averages ---
     df["sma_20"] = ta.sma(df["Close"], length=20)
@@ -73,14 +72,13 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
 
     macd_df = ta.macd(df["Close"], fast=12, slow=26, signal=9)
     if macd_df is not None and not macd_df.empty:
-        df["macd"] = macd_df.iloc[:, 0]           # MACD line
-        df["macd_histogram"] = macd_df.iloc[:, 1] # Histogram
-        df["macd_signal"] = macd_df.iloc[:, 2]    # Signal line
+        df["macd"] = macd_df.iloc[:, 0]  # MACD line
+        df["macd_histogram"] = macd_df.iloc[:, 1]  # Histogram
+        df["macd_signal"] = macd_df.iloc[:, 2]  # Signal line
 
     # --- Volatility ---
     bbands_df = ta.bbands(df["Close"], length=20, std=2)
     if bbands_df is not None and not bbands_df.empty:
-        cols = bbands_df.columns.tolist()
         # Columns are: BBL, BBM, BBU, BBB, BBP (lower, middle, upper, bandwidth, %)
         df["bb_lower"] = bbands_df.iloc[:, 0]
         df["bb_middle"] = bbands_df.iloc[:, 1]
@@ -94,15 +92,14 @@ def compute_indicators(df: pd.DataFrame) -> pd.DataFrame:
     df["volume_ratio_20d"] = df["Volume"] / vol_ma_20
 
     # Rename back to lowercase
-    df = df.rename(columns={
-        "Open": "open", "High": "high", "Low": "low",
-        "Close": "close", "Volume": "volume"
-    })
+    df = df.rename(
+        columns={"Open": "open", "High": "high", "Low": "low", "Close": "close", "Volume": "volume"}
+    )
 
     return df
 
 
-def _safe_float(val) -> Optional[float]:
+def _safe_float(val) -> float | None:
     """Convert a value to float, returning None for NaN/None."""
     if val is None:
         return None
@@ -116,6 +113,7 @@ def _safe_float(val) -> Optional[float]:
 # ---------------------------------------------------------------------------
 # Relative strength vs SPY
 # ---------------------------------------------------------------------------
+
 
 def compute_relative_strength(
     ticker_df: pd.DataFrame,
@@ -131,9 +129,6 @@ def compute_relative_strength(
     if spy_df.empty or ticker_df.empty:
         return pd.Series(dtype=float, index=ticker_df.index)
 
-    ticker_ret = ticker_df["close"].pct_change(lookback)
-    spy_ret = spy_df["close"].pct_change(lookback)
-
     # Align on date
     spy_aligned = spy_df.set_index("date")["close"].pct_change(lookback)
     ticker_aligned = ticker_df.set_index("date")["close"].pct_change(lookback)
@@ -145,6 +140,7 @@ def compute_relative_strength(
 # ---------------------------------------------------------------------------
 # DB upsert
 # ---------------------------------------------------------------------------
+
 
 async def upsert_technical_snapshots(
     session: AsyncSession,
@@ -161,10 +157,22 @@ async def upsert_technical_snapshots(
         return 0
 
     indicator_cols = [
-        "sma_20", "sma_50", "sma_100", "sma_200", "ema_20", "ema_50",
-        "rsi_14", "macd", "macd_signal", "macd_histogram",
-        "bb_upper", "bb_middle", "bb_lower", "bb_bandwidth",
-        "atr_14", "volume_ratio_20d",
+        "sma_20",
+        "sma_50",
+        "sma_100",
+        "sma_200",
+        "ema_20",
+        "ema_50",
+        "rsi_14",
+        "macd",
+        "macd_signal",
+        "macd_histogram",
+        "bb_upper",
+        "bb_middle",
+        "bb_lower",
+        "bb_bandwidth",
+        "atr_14",
+        "volume_ratio_20d",
     ]
 
     rows = []
@@ -204,6 +212,7 @@ async def upsert_technical_snapshots(
 # Load price bars from DB
 # ---------------------------------------------------------------------------
 
+
 async def load_price_bars(
     session: AsyncSession,
     ticker_id: int,
@@ -222,14 +231,17 @@ async def load_price_bars(
     if not bars:
         return pd.DataFrame()
 
-    rows = [{
-        "date": b.date,
-        "open": b.open,
-        "high": b.high,
-        "low": b.low,
-        "close": b.close,
-        "volume": b.volume or 0,
-    } for b in bars]
+    rows = [
+        {
+            "date": b.date,
+            "open": b.open,
+            "high": b.high,
+            "low": b.low,
+            "close": b.close,
+            "volume": b.volume or 0,
+        }
+        for b in bars
+    ]
 
     return pd.DataFrame(rows)
 
@@ -238,10 +250,11 @@ async def load_price_bars(
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 async def compute_and_store_technicals(
     session: AsyncSession,
     ticker: Ticker,
-    spy_df: Optional[pd.DataFrame] = None,
+    spy_df: pd.DataFrame | None = None,
 ) -> int:
     """
     Compute technical indicators for a ticker and store in the database.
@@ -288,13 +301,11 @@ async def compute_technicals_batch(
 
     Loads SPY data once (for relative strength calculation) and reuses it.
     """
-    spy_df: Optional[pd.DataFrame] = None
+    spy_df: pd.DataFrame | None = None
 
     if include_spy_rs:
         # Find SPY ticker in DB
-        result = await session.execute(
-            select(Ticker).where(Ticker.symbol == "SPY")
-        )
+        result = await session.execute(select(Ticker).where(Ticker.symbol == "SPY"))
         spy_ticker = result.scalar_one_or_none()
         if spy_ticker:
             spy_df = await load_price_bars(session, spy_ticker.id, days=400)
@@ -314,6 +325,7 @@ async def compute_technicals_batch(
 # ---------------------------------------------------------------------------
 # Signal detection helpers (used by alert engine)
 # ---------------------------------------------------------------------------
+
 
 def detect_golden_cross(df: pd.DataFrame) -> bool:
     """
@@ -350,7 +362,7 @@ def detect_bollinger_squeeze(df: pd.DataFrame, threshold: float = 0.03) -> bool:
     return bool(normalized_bw < threshold)
 
 
-def get_rsi_signal(rsi: Optional[float]) -> str:
+def get_rsi_signal(rsi: float | None) -> str:
     """Classify RSI value into a human-readable signal."""
     if rsi is None:
         return "unknown"

@@ -8,8 +8,7 @@ Tests price fetching and storage using:
 
 from __future__ import annotations
 
-from datetime import date, timedelta
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pandas as pd
 import pytest
@@ -43,7 +42,9 @@ class TestDaysToYfPeriod:
 
 @pytest.mark.integration
 class TestUpsertPriceBars:
-    async def test_upsert_new_bars(self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df):
+    async def test_upsert_new_bars(
+        self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df
+    ):
         """New price bars should be inserted."""
         count = await upsert_price_bars(db_session, sample_ticker.id, sample_ohlcv_df, "yfinance")
         assert count == len(sample_ohlcv_df)
@@ -54,11 +55,15 @@ class TestUpsertPriceBars:
         stored_count = result.scalar_one()
         assert stored_count == len(sample_ohlcv_df)
 
-    async def test_upsert_empty_df_returns_zero(self, db_session: AsyncSession, sample_ticker: Ticker):
+    async def test_upsert_empty_df_returns_zero(
+        self, db_session: AsyncSession, sample_ticker: Ticker
+    ):
         count = await upsert_price_bars(db_session, sample_ticker.id, pd.DataFrame(), "yfinance")
         assert count == 0
 
-    async def test_upsert_updates_existing(self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df):
+    async def test_upsert_updates_existing(
+        self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df
+    ):
         """Upserting the same data twice should not duplicate rows."""
         await upsert_price_bars(db_session, sample_ticker.id, sample_ohlcv_df, "yfinance")
 
@@ -76,7 +81,9 @@ class TestUpsertPriceBars:
         stored_count = result.scalar_one()
         assert stored_count == len(sample_ohlcv_df)
 
-    async def test_source_is_recorded(self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df):
+    async def test_source_is_recorded(
+        self, db_session: AsyncSession, sample_ticker: Ticker, sample_ohlcv_df
+    ):
         await upsert_price_bars(db_session, sample_ticker.id, sample_ohlcv_df, "alpha_vantage")
 
         result = await db_session.execute(
@@ -155,9 +162,7 @@ class TestFetchAndStorePrices:
         await db_session.refresh(sample_ticker)
         assert sample_ticker.last_price_fetch is not None
 
-    async def test_no_data_returns_zero(
-        self, db_session: AsyncSession, sample_ticker: Ticker
-    ):
+    async def test_no_data_returns_zero(self, db_session: AsyncSession, sample_ticker: Ticker):
         with patch("ingestion.price_data._fetch_yfinance", return_value=pd.DataFrame()):
             with patch("ingestion.price_data._fetch_alpha_vantage", return_value=pd.DataFrame()):
                 with patch("ingestion.price_data._fetch_polygon", return_value=pd.DataFrame()):
@@ -195,6 +200,7 @@ class TestFetchBatch:
 
         def _make_ohlcv_df(days=10):
             from tests.conftest import _make_ohlcv_df as make_df
+
             return make_df(days=days)
 
         with patch("ingestion.price_data._fetch_yfinance", side_effect=flaky_fetch):

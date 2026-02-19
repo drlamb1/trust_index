@@ -12,9 +12,8 @@ Usage:
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
-from celery import chain, chord, group
+from celery import chain
 from celery.result import AsyncResult
 
 from scheduler.tasks import (
@@ -32,6 +31,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 # Pipeline builders
 # ---------------------------------------------------------------------------
+
 
 def run_daily_eod_pipeline() -> AsyncResult:
     """
@@ -71,6 +71,7 @@ def run_weekly_maintenance() -> AsyncResult:
 # Manual trigger helpers (for CLI and testing)
 # ---------------------------------------------------------------------------
 
+
 def trigger_price_fetch_for_tickers(ticker_ids: list[int], days: int = 30) -> list[AsyncResult]:
     """Trigger price fetch for a specific set of tickers in parallel."""
     from scheduler.tasks import task_fetch_prices
@@ -92,6 +93,7 @@ def trigger_technicals_for_tickers(ticker_ids: list[int]) -> list[AsyncResult]:
 # ---------------------------------------------------------------------------
 # Status helpers
 # ---------------------------------------------------------------------------
+
 
 def get_task_status(task_id: str) -> dict:
     """Get the status of a Celery task by ID."""

@@ -18,9 +18,8 @@ Run tests:
 from __future__ import annotations
 
 import asyncio
-import json
-from datetime import date, datetime, timedelta
-from typing import AsyncGenerator
+from collections.abc import AsyncGenerator
+from datetime import date, timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pandas as pd
@@ -29,7 +28,7 @@ import pytest_asyncio
 from sqlalchemy import event
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
-from core.models import Base, PriceBar, TechnicalSnapshot, Ticker
+from core.models import Base, PriceBar, Ticker
 
 # ---------------------------------------------------------------------------
 # Test database (SQLite in-memory)
@@ -86,6 +85,7 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, None]:
 # Sample data fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest_asyncio.fixture
 async def sample_ticker(db_session: AsyncSession) -> Ticker:
     """Create and persist a sample ticker for use in tests."""
@@ -111,12 +111,30 @@ async def sample_ticker(db_session: AsyncSession) -> Ticker:
 async def sample_tickers(db_session: AsyncSession) -> list[Ticker]:
     """Create a batch of tickers for bulk operation tests."""
     tickers = [
-        Ticker(symbol="AAPL", name="Apple Inc.", sector="Information Technology",
-               in_sp500=True, is_active=True, first_seen=date.today()),
-        Ticker(symbol="MSFT", name="Microsoft Corp.", sector="Information Technology",
-               in_sp500=True, is_active=True, first_seen=date.today()),
-        Ticker(symbol="SPY", name="SPDR S&P 500 ETF", sector="ETF",
-               in_sp500=False, is_active=True, first_seen=date.today()),
+        Ticker(
+            symbol="AAPL",
+            name="Apple Inc.",
+            sector="Information Technology",
+            in_sp500=True,
+            is_active=True,
+            first_seen=date.today(),
+        ),
+        Ticker(
+            symbol="MSFT",
+            name="Microsoft Corp.",
+            sector="Information Technology",
+            in_sp500=True,
+            is_active=True,
+            first_seen=date.today(),
+        ),
+        Ticker(
+            symbol="SPY",
+            name="SPDR S&P 500 ETF",
+            sector="ETF",
+            in_sp500=False,
+            is_active=True,
+            first_seen=date.today(),
+        ),
     ]
     for t in tickers:
         db_session.add(t)
@@ -161,18 +179,24 @@ def _make_ohlcv_df(
 
     closes = prices
     opens = [p * (1 + volatility * 0.3 * rng.standard_normal()) for p in closes]
-    highs = [max(o, c) * (1 + abs(volatility * rng.standard_normal())) for o, c in zip(opens, closes)]
-    lows = [min(o, c) * (1 - abs(volatility * rng.standard_normal())) for o, c in zip(opens, closes)]
+    highs = [
+        max(o, c) * (1 + abs(volatility * rng.standard_normal())) for o, c in zip(opens, closes)
+    ]
+    lows = [
+        min(o, c) * (1 - abs(volatility * rng.standard_normal())) for o, c in zip(opens, closes)
+    ]
     volumes = [max(1, int(1_000_000 + 500_000 * rng.standard_normal())) for _ in closes]
 
-    return pd.DataFrame({
-        "date": dates,
-        "open": opens,
-        "high": highs,
-        "low": lows,
-        "close": closes,
-        "volume": volumes,
-    })
+    return pd.DataFrame(
+        {
+            "date": dates,
+            "open": opens,
+            "high": highs,
+            "low": lows,
+            "close": closes,
+            "volume": volumes,
+        }
+    )
 
 
 @pytest.fixture
@@ -213,6 +237,7 @@ async def sample_price_bars(db_session: AsyncSession, sample_ticker: Ticker) -> 
 # API mock fixtures
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture
 def mock_yfinance(monkeypatch):
     """
@@ -222,10 +247,16 @@ def mock_yfinance(monkeypatch):
     df = _make_ohlcv_df(days=60)
 
     mock_ticker = MagicMock()
-    mock_ticker.history.return_value = df.rename(columns={
-        "date": "Date", "open": "Open", "high": "High",
-        "low": "Low", "close": "Close", "volume": "Volume"
-    }).set_index("Date")
+    mock_ticker.history.return_value = df.rename(
+        columns={
+            "date": "Date",
+            "open": "Open",
+            "high": "High",
+            "low": "Low",
+            "close": "Close",
+            "volume": "Volume",
+        }
+    ).set_index("Date")
 
     with patch("yfinance.Ticker", return_value=mock_ticker):
         yield mock_ticker
@@ -273,6 +304,7 @@ def mock_anthropic():
 # Settings override for tests
 # ---------------------------------------------------------------------------
 
+
 @pytest.fixture(autouse=True)
 def override_settings(monkeypatch):
     """
@@ -281,19 +313,23 @@ def override_settings(monkeypatch):
     """
     monkeypatch.setattr(
         "config.settings.settings",
-        type("TestSettings", (), {
-            "database_url": TEST_DB_URL.replace("sqlite+aiosqlite", "sqlite"),
-            "redis_url": "redis://localhost:6379",
-            "redis_uses_ssl": False,
-            "anthropic_api_key": "test-key",
-            "alpha_vantage_api_key": "test-key",
-            "polygon_api_key": "",
-            "finnhub_api_key": "",
-            "edgar_user_agent": "EdgeFinder/test test@example.com",
-            "environment": "development",
-            "log_level": "ERROR",  # Quiet in tests
-            "edgar_rate_limit": 10.0,
-            "has_anthropic": True,
-            "has_finnhub": False,
-        })()
+        type(
+            "TestSettings",
+            (),
+            {
+                "database_url": TEST_DB_URL.replace("sqlite+aiosqlite", "sqlite"),
+                "redis_url": "redis://localhost:6379",
+                "redis_uses_ssl": False,
+                "anthropic_api_key": "test-key",
+                "alpha_vantage_api_key": "test-key",
+                "polygon_api_key": "",
+                "finnhub_api_key": "",
+                "edgar_user_agent": "EdgeFinder/test test@example.com",
+                "environment": "development",
+                "log_level": "ERROR",  # Quiet in tests
+                "edgar_rate_limit": 10.0,
+                "has_anthropic": True,
+                "has_finnhub": False,
+            },
+        )(),
     )

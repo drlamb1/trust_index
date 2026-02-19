@@ -20,15 +20,12 @@ Usage:
 from __future__ import annotations
 
 import asyncio
-import hashlib
 import logging
-from datetime import date, datetime, timedelta, timezone
-from typing import Optional
+from datetime import UTC, date, datetime, timedelta
 
 import httpx
 import pandas as pd
 import yfinance as yf
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config.settings import settings
@@ -65,6 +62,7 @@ def _days_to_yf_period(days: int) -> str:
 # Primary: yfinance
 # ---------------------------------------------------------------------------
 
+
 def _fetch_yfinance_sync(symbol: str, period: str) -> pd.DataFrame:
     """
     Synchronous yfinance fetch (runs in thread pool via asyncio.to_thread).
@@ -83,8 +81,16 @@ def _fetch_yfinance_sync(symbol: str, period: str) -> pd.DataFrame:
 
     # Reset index so date becomes a column
     df = df.reset_index()
-    df = df.rename(columns={"date": "date", "open": "open", "high": "high",
-                             "low": "low", "close": "close", "volume": "volume"})
+    df = df.rename(
+        columns={
+            "date": "date",
+            "open": "open",
+            "high": "high",
+            "low": "low",
+            "close": "close",
+            "volume": "volume",
+        }
+    )
 
     # Drop timezone from date index (we store as date, not datetime)
     if hasattr(df["date"].dtype, "tz"):
@@ -155,14 +161,16 @@ async def _fetch_alpha_vantage(symbol: str, days: int) -> pd.DataFrame:
             bar_date = date.fromisoformat(date_str)
             if bar_date < cutoff:
                 continue
-            rows.append({
-                "date": bar_date,
-                "open": float(values.get("1. open", 0)),
-                "high": float(values.get("2. high", 0)),
-                "low": float(values.get("3. low", 0)),
-                "close": float(values.get("4. close", 0)),
-                "volume": int(values.get("6. volume", 0)),
-            })
+            rows.append(
+                {
+                    "date": bar_date,
+                    "open": float(values.get("1. open", 0)),
+                    "high": float(values.get("2. high", 0)),
+                    "low": float(values.get("3. low", 0)),
+                    "close": float(values.get("4. close", 0)),
+                    "volume": int(values.get("6. volume", 0)),
+                }
+            )
 
         df = pd.DataFrame(rows)
         if not df.empty:
@@ -178,6 +186,7 @@ async def _fetch_alpha_vantage(symbol: str, days: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Polygon.io — third fallback (EOD data only)
 # ---------------------------------------------------------------------------
+
 
 async def _fetch_polygon(symbol: str, days: int) -> pd.DataFrame:
     """Fetch EOD data from Polygon.io (free tier: 5 req/min)."""
@@ -203,14 +212,16 @@ async def _fetch_polygon(symbol: str, days: int) -> pd.DataFrame:
 
         rows = []
         for bar in data["results"]:
-            rows.append({
-                "date": date.fromtimestamp(bar["t"] / 1000),
-                "open": bar.get("o"),
-                "high": bar.get("h"),
-                "low": bar.get("l"),
-                "close": bar.get("c"),
-                "volume": bar.get("v"),
-            })
+            rows.append(
+                {
+                    "date": date.fromtimestamp(bar["t"] / 1000),
+                    "open": bar.get("o"),
+                    "high": bar.get("h"),
+                    "low": bar.get("l"),
+                    "close": bar.get("c"),
+                    "volume": bar.get("v"),
+                }
+            )
 
         df = pd.DataFrame(rows).sort_values("date").reset_index(drop=True)
         logger.debug("Polygon.io fetched %d bars for %s", len(df), symbol)
@@ -224,6 +235,7 @@ async def _fetch_polygon(symbol: str, days: int) -> pd.DataFrame:
 # ---------------------------------------------------------------------------
 # Orchestration: try sources in order
 # ---------------------------------------------------------------------------
+
 
 async def fetch_ohlcv(symbol: str, days: int = 365) -> tuple[pd.DataFrame, str]:
     """
@@ -258,6 +270,7 @@ async def fetch_ohlcv(symbol: str, days: int = 365) -> tuple[pd.DataFrame, str]:
 # DB upsert
 # ---------------------------------------------------------------------------
 
+
 async def upsert_price_bars(
     session: AsyncSession,
     ticker_id: int,
@@ -275,17 +288,21 @@ async def upsert_price_bars(
 
     rows = []
     for _, row in df.iterrows():
-        rows.append({
-            "ticker_id": ticker_id,
-            "date": row["date"],
-            "open": float(row["open"]) if pd.notna(row.get("open")) else None,
-            "high": float(row["high"]) if pd.notna(row.get("high")) else None,
-            "low": float(row["low"]) if pd.notna(row.get("low")) else None,
-            "close": float(row["close"]),
-            "adj_close": float(row.get("adj_close", row["close"])) if pd.notna(row.get("adj_close", row["close"])) else None,
-            "volume": int(row["volume"]) if pd.notna(row.get("volume")) else None,
-            "source": source,
-        })
+        rows.append(
+            {
+                "ticker_id": ticker_id,
+                "date": row["date"],
+                "open": float(row["open"]) if pd.notna(row.get("open")) else None,
+                "high": float(row["high"]) if pd.notna(row.get("high")) else None,
+                "low": float(row["low"]) if pd.notna(row.get("low")) else None,
+                "close": float(row["close"]),
+                "adj_close": float(row.get("adj_close", row["close"]))
+                if pd.notna(row.get("adj_close", row["close"]))
+                else None,
+                "volume": int(row["volume"]) if pd.notna(row.get("volume")) else None,
+                "source": source,
+            }
+        )
 
     # Dialect-aware upsert: PostgreSQL and SQLite 3.24+ both support
     # INSERT ... ON CONFLICT (columns) DO UPDATE SET ...
@@ -316,6 +333,7 @@ async def upsert_price_bars(
 # Main entry point
 # ---------------------------------------------------------------------------
 
+
 async def fetch_and_store_prices(
     session: AsyncSession,
     ticker: Ticker,
@@ -337,13 +355,11 @@ async def fetch_and_store_prices(
     count = await upsert_price_bars(session, ticker.id, df, source)
 
     # Update last_price_fetch timestamp on the ticker
-    ticker.last_price_fetch = datetime.now(timezone.utc)
+    ticker.last_price_fetch = datetime.now(UTC)
     session.add(ticker)
     await session.flush()  # Write to DB immediately (session.refresh() does not autoflush)
 
-    logger.info(
-        "Stored %d price bars for %s (source: %s)", count, ticker.symbol, source
-    )
+    logger.info("Stored %d price bars for %s (source: %s)", count, ticker.symbol, source)
     return count
 
 
@@ -391,7 +407,7 @@ async def fetch_and_store_prices_batch(
                 results[symbol] = 0
                 continue
             count = await upsert_price_bars(session, ticker.id, df, source)
-            ticker.last_price_fetch = datetime.now(timezone.utc)
+            ticker.last_price_fetch = datetime.now(UTC)
             session.add(ticker)
             await session.flush()
             results[symbol] = count
@@ -406,6 +422,7 @@ async def fetch_and_store_prices_batch(
 # ---------------------------------------------------------------------------
 # S&P 500 universe fetcher
 # ---------------------------------------------------------------------------
+
 
 async def fetch_sp500_symbols() -> list[dict]:
     """
@@ -437,12 +454,16 @@ async def fetch_sp500_symbols() -> list[dict]:
                 continue
             # Some symbols have dots (e.g., BRK.B) — convert to yfinance format (BRK-B)
             symbol = symbol.replace(".", "-")
-            result.append({
-                "symbol": symbol,
-                "name": str(row.get("security", row.get("company", ""))).strip(),
-                "sector": str(row.get("gics_sector", row.get("sector", ""))).strip(),
-                "industry": str(row.get("gics_sub-industry", row.get("sub-industry", ""))).strip(),
-            })
+            result.append(
+                {
+                    "symbol": symbol,
+                    "name": str(row.get("security", row.get("company", ""))).strip(),
+                    "sector": str(row.get("gics_sector", row.get("sector", ""))).strip(),
+                    "industry": str(
+                        row.get("gics_sub-industry", row.get("sub-industry", ""))
+                    ).strip(),
+                }
+            )
 
         logger.info("Fetched %d S&P 500 constituents from Wikipedia", len(result))
         return result

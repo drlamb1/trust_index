@@ -10,16 +10,17 @@ types (JSONB for flexible fields, INTEGER ARRAY for ticker_ids on news_articles)
 
 from __future__ import annotations
 
-from typing import Sequence, Union
+from collections.abc import Sequence
 
 import sqlalchemy as sa
-from alembic import op
 from sqlalchemy.dialects import postgresql
 
+from alembic import op
+
 revision: str = "0001"
-down_revision: Union[str, None] = None
-branch_labels: Union[str, Sequence[str], None] = None
-depends_on: Union[str, Sequence[str], None] = None
+down_revision: str | None = None
+branch_labels: str | Sequence[str] | None = None
+depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
@@ -80,11 +81,15 @@ def upgrade() -> None:
         sa.Column("volume", sa.BigInteger(), nullable=True),
         sa.Column("source", sa.String(50), nullable=False, server_default="yfinance"),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
@@ -119,11 +124,15 @@ def upgrade() -> None:
         sa.Column("volume_ratio_20d", sa.Float(), nullable=True),
         sa.Column("rs_vs_spy_20d", sa.Float(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
@@ -149,11 +158,15 @@ def upgrade() -> None:
         sa.Column("is_analyzed", sa.Boolean(), nullable=False, server_default="false"),
         sa.Column("parse_error", sa.Text(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
@@ -176,11 +189,15 @@ def upgrade() -> None:
         sa.Column("content", sa.Text(), nullable=True),
         sa.Column("word_count", sa.Integer(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["filing_id"], ["filings.id"], ondelete="CASCADE"),
@@ -204,11 +221,15 @@ def upgrade() -> None:
         sa.Column("analyzed_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("model_used", sa.String(50), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["filing_id"], ["filings.id"], ondelete="CASCADE"),
@@ -230,17 +251,23 @@ def upgrade() -> None:
         sa.Column("unit", sa.String(20), nullable=True),
         sa.Column("source", sa.String(50), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "ticker_id", "period", "metric_name",
+            "ticker_id",
+            "period",
+            "metric_name",
             name="uq_financial_metrics_ticker_period_name",
         ),
     )
@@ -265,7 +292,9 @@ def upgrade() -> None:
         sa.Column("url", sa.Text(), nullable=True),
         sa.Column("published_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "fetched_at", sa.DateTime(timezone=True), nullable=False,
+            "fetched_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column("summary", sa.Text(), nullable=True),
@@ -275,11 +304,15 @@ def upgrade() -> None:
         sa.Column("sentiment_scored_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("sentiment_model", sa.String(50), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -306,11 +339,15 @@ def upgrade() -> None:
         sa.Column("filed_date", sa.Date(), nullable=True),
         sa.Column("transaction_date", sa.Date(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
@@ -334,17 +371,23 @@ def upgrade() -> None:
         sa.Column("change_shares", sa.Float(), nullable=True),
         sa.Column("change_pct", sa.Float(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
         sa.UniqueConstraint(
-            "ticker_id", "institution_cik", "period_date",
+            "ticker_id",
+            "institution_cik",
+            "period_date",
             name="uq_institutional_ticker_inst_period",
         ),
     )
@@ -364,11 +407,15 @@ def upgrade() -> None:
         sa.Column("criteria_yaml", sa.Text(), nullable=True),
         sa.Column("is_active", sa.Boolean(), nullable=False, server_default="true"),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),
@@ -392,18 +439,23 @@ def upgrade() -> None:
         sa.Column("snoozed_until", sa.DateTime(timezone=True), nullable=True),
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["ticker_id"], ["tickers.id"], ondelete="CASCADE"),
         sa.PrimaryKeyConstraint("id"),
     )
     op.create_index(
-        "ix_alerts_ticker_severity_created", "alerts",
+        "ix_alerts_ticker_severity_created",
+        "alerts",
         ["ticker_id", "severity", "created_at"],
     )
 
@@ -424,11 +476,15 @@ def upgrade() -> None:
         sa.Column("sector_relative", sa.Float(), nullable=True),
         sa.Column("composite_score", sa.Float(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["alert_id"], ["alerts.id"], ondelete="CASCADE"),
@@ -447,15 +503,21 @@ def upgrade() -> None:
         sa.Column("score", sa.Float(), nullable=False),
         sa.Column("match_reasons", postgresql.JSONB(), nullable=True),
         sa.Column(
-            "matched_at", sa.DateTime(timezone=True), nullable=False,
+            "matched_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.ForeignKeyConstraint(["thesis_id"], ["theses.id"], ondelete="CASCADE"),
@@ -478,11 +540,15 @@ def upgrade() -> None:
         sa.Column("delivered_at", sa.DateTime(timezone=True), nullable=True),
         sa.Column("delivery_channels", postgresql.JSONB(), nullable=True),
         sa.Column(
-            "created_at", sa.DateTime(timezone=True), nullable=False,
+            "created_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.Column(
-            "updated_at", sa.DateTime(timezone=True), nullable=False,
+            "updated_at",
+            sa.DateTime(timezone=True),
+            nullable=False,
             server_default=sa.text("now()"),
         ),
         sa.PrimaryKeyConstraint("id"),

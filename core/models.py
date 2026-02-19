@@ -19,7 +19,6 @@ from __future__ import annotations
 import enum
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
 
 import sqlalchemy as sa
 from sqlalchemy import (
@@ -27,7 +26,6 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Enum,
     Float,
     ForeignKey,
     Index,
@@ -55,6 +53,7 @@ IntArrayType = ARRAY(Integer).with_variant(sa.JSON(), "sqlite")
 # Base
 # ---------------------------------------------------------------------------
 
+
 class Base(DeclarativeBase):
     """Base class for all ORM models."""
 
@@ -76,6 +75,7 @@ class Base(DeclarativeBase):
 # Enums
 # ---------------------------------------------------------------------------
 
+
 class FilingType(str, enum.Enum):
     TEN_K = "10-K"
     TEN_Q = "10-Q"
@@ -86,9 +86,9 @@ class FilingType(str, enum.Enum):
 
 
 class AlertSeverity(str, enum.Enum):
-    GREEN = "green"    # 70-80: worth watching
+    GREEN = "green"  # 70-80: worth watching
     YELLOW = "yellow"  # 80-90: strong signal
-    RED = "red"        # 90-100: exceptional opportunity
+    RED = "red"  # 90-100: exceptional opportunity
 
 
 class AlertType(str, enum.Enum):
@@ -111,83 +111,96 @@ class InsiderTradeType(str, enum.Enum):
 
 
 class NewsTier(int, enum.Enum):
-    SEC = 1         # SEC filings / press releases — highest signal
-    TIER1 = 2       # Reuters, WSJ, FT, Bloomberg
-    TIER2 = 3       # Seeking Alpha, Yahoo Finance, CNBC
-    SOCIAL = 4      # Reddit, StockTwits, Twitter
+    SEC = 1  # SEC filings / press releases — highest signal
+    TIER1 = 2  # Reuters, WSJ, FT, Bloomberg
+    TIER2 = 3  # Seeking Alpha, Yahoo Finance, CNBC
+    SOCIAL = 4  # Reddit, StockTwits, Twitter
 
 
 # ---------------------------------------------------------------------------
 # 1. Ticker — master universe table
 # ---------------------------------------------------------------------------
 
+
 class Ticker(Base):
     __tablename__ = "tickers"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     symbol: Mapped[str] = mapped_column(String(20), nullable=False, unique=True, index=True)
-    name: Mapped[Optional[str]] = mapped_column(String(255))
-    sector: Mapped[Optional[str]] = mapped_column(String(100))
-    industry: Mapped[Optional[str]] = mapped_column(String(100))
-    market_cap: Mapped[Optional[float]] = mapped_column(Float)
-    cik: Mapped[Optional[str]] = mapped_column(String(20), index=True)  # SEC CIK number
+    name: Mapped[str | None] = mapped_column(String(255))
+    sector: Mapped[str | None] = mapped_column(String(100))
+    industry: Mapped[str | None] = mapped_column(String(100))
+    market_cap: Mapped[float | None] = mapped_column(Float)
+    cik: Mapped[str | None] = mapped_column(String(20), index=True)  # SEC CIK number
 
     # Universe membership
     in_sp500: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     in_custom: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     in_watchlist: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    watchlist_priority: Mapped[Optional[int]] = mapped_column(Integer)
-    watchlist_notes: Mapped[Optional[str]] = mapped_column(Text)
+    watchlist_priority: Mapped[int | None] = mapped_column(Integer)
+    watchlist_notes: Mapped[str | None] = mapped_column(Text)
 
     # Thesis associations (list of thesis slugs, stored as JSON array)
-    thesis_tags: Mapped[Optional[list]] = mapped_column(JsonType)
+    thesis_tags: Mapped[list | None] = mapped_column(JsonType)
 
     # Metadata
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
-    sp500_added_date: Mapped[Optional[date]] = mapped_column(Date)
-    sp500_removed_date: Mapped[Optional[date]] = mapped_column(Date)
-    first_seen: Mapped[Optional[date]] = mapped_column(Date)
-    last_price_fetch: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    sp500_added_date: Mapped[date | None] = mapped_column(Date)
+    sp500_removed_date: Mapped[date | None] = mapped_column(Date)
+    first_seen: Mapped[date | None] = mapped_column(Date)
+    last_price_fetch: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
     # Relationships — passive_deletes=True lets the DB handle ondelete="CASCADE"
     # instead of SQLAlchemy trying to null-out the FK before deletion.
-    price_bars: Mapped[list["PriceBar"]] = relationship(back_populates="ticker", passive_deletes=True)
-    technical_snapshots: Mapped[list["TechnicalSnapshot"]] = relationship(back_populates="ticker", passive_deletes=True)
-    filings: Mapped[list["Filing"]] = relationship(back_populates="ticker", passive_deletes=True)
-    financial_metrics: Mapped[list["FinancialMetric"]] = relationship(back_populates="ticker", passive_deletes=True)
-    alerts: Mapped[list["Alert"]] = relationship(back_populates="ticker", passive_deletes=True)
-    thesis_matches: Mapped[list["ThesisMatch"]] = relationship(back_populates="ticker", passive_deletes=True)
-    insider_trades: Mapped[list["InsiderTrade"]] = relationship(back_populates="ticker", passive_deletes=True)
-    institutional_holdings: Mapped[list["InstitutionalHolding"]] = relationship(back_populates="ticker", passive_deletes=True)
+    price_bars: Mapped[list[PriceBar]] = relationship(back_populates="ticker", passive_deletes=True)
+    technical_snapshots: Mapped[list[TechnicalSnapshot]] = relationship(
+        back_populates="ticker", passive_deletes=True
+    )
+    filings: Mapped[list[Filing]] = relationship(back_populates="ticker", passive_deletes=True)
+    financial_metrics: Mapped[list[FinancialMetric]] = relationship(
+        back_populates="ticker", passive_deletes=True
+    )
+    alerts: Mapped[list[Alert]] = relationship(back_populates="ticker", passive_deletes=True)
+    thesis_matches: Mapped[list[ThesisMatch]] = relationship(
+        back_populates="ticker", passive_deletes=True
+    )
+    insider_trades: Mapped[list[InsiderTrade]] = relationship(
+        back_populates="ticker", passive_deletes=True
+    )
+    institutional_holdings: Mapped[list[InstitutionalHolding]] = relationship(
+        back_populates="ticker", passive_deletes=True
+    )
 
 
 # ---------------------------------------------------------------------------
 # 2. PriceBar — OHLCV daily data
 # ---------------------------------------------------------------------------
 
+
 class PriceBar(Base):
     __tablename__ = "price_bars"
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),
-        primary_key=True, autoincrement=True,
+        primary_key=True,
+        autoincrement=True,
     )
     ticker_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
     )
     date: Mapped[date] = mapped_column(Date, nullable=False)
 
-    open: Mapped[Optional[float]] = mapped_column(Float)
-    high: Mapped[Optional[float]] = mapped_column(Float)
-    low: Mapped[Optional[float]] = mapped_column(Float)
+    open: Mapped[float | None] = mapped_column(Float)
+    high: Mapped[float | None] = mapped_column(Float)
+    low: Mapped[float | None] = mapped_column(Float)
     close: Mapped[float] = mapped_column(Float, nullable=False)
-    adj_close: Mapped[Optional[float]] = mapped_column(Float)
-    volume: Mapped[Optional[int]] = mapped_column(BigInteger)
+    adj_close: Mapped[float | None] = mapped_column(Float)
+    volume: Mapped[int | None] = mapped_column(BigInteger)
 
     # Source tracking
     source: Mapped[str] = mapped_column(String(50), default="yfinance")
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="price_bars")
+    ticker: Mapped[Ticker] = relationship(back_populates="price_bars")
 
     __table_args__ = (
         UniqueConstraint("ticker_id", "date", name="uq_price_bars_ticker_date"),
@@ -199,12 +212,14 @@ class PriceBar(Base):
 # 3. TechnicalSnapshot — computed indicators per ticker per day
 # ---------------------------------------------------------------------------
 
+
 class TechnicalSnapshot(Base):
     __tablename__ = "technical_snapshots"
 
     id: Mapped[int] = mapped_column(
         BigInteger().with_variant(Integer(), "sqlite"),
-        primary_key=True, autoincrement=True,
+        primary_key=True,
+        autoincrement=True,
     )
     ticker_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
@@ -212,33 +227,33 @@ class TechnicalSnapshot(Base):
     date: Mapped[date] = mapped_column(Date, nullable=False)
 
     # Trend
-    sma_20: Mapped[Optional[float]] = mapped_column(Float)
-    sma_50: Mapped[Optional[float]] = mapped_column(Float)
-    sma_100: Mapped[Optional[float]] = mapped_column(Float)
-    sma_200: Mapped[Optional[float]] = mapped_column(Float)
-    ema_20: Mapped[Optional[float]] = mapped_column(Float)
-    ema_50: Mapped[Optional[float]] = mapped_column(Float)
+    sma_20: Mapped[float | None] = mapped_column(Float)
+    sma_50: Mapped[float | None] = mapped_column(Float)
+    sma_100: Mapped[float | None] = mapped_column(Float)
+    sma_200: Mapped[float | None] = mapped_column(Float)
+    ema_20: Mapped[float | None] = mapped_column(Float)
+    ema_50: Mapped[float | None] = mapped_column(Float)
 
     # Momentum
-    rsi_14: Mapped[Optional[float]] = mapped_column(Float)
-    macd: Mapped[Optional[float]] = mapped_column(Float)
-    macd_signal: Mapped[Optional[float]] = mapped_column(Float)
-    macd_histogram: Mapped[Optional[float]] = mapped_column(Float)
+    rsi_14: Mapped[float | None] = mapped_column(Float)
+    macd: Mapped[float | None] = mapped_column(Float)
+    macd_signal: Mapped[float | None] = mapped_column(Float)
+    macd_histogram: Mapped[float | None] = mapped_column(Float)
 
     # Volatility
-    bb_upper: Mapped[Optional[float]] = mapped_column(Float)   # Bollinger Band upper
-    bb_middle: Mapped[Optional[float]] = mapped_column(Float)  # = SMA 20
-    bb_lower: Mapped[Optional[float]] = mapped_column(Float)   # Bollinger Band lower
-    bb_bandwidth: Mapped[Optional[float]] = mapped_column(Float)
-    atr_14: Mapped[Optional[float]] = mapped_column(Float)     # Average True Range
+    bb_upper: Mapped[float | None] = mapped_column(Float)  # Bollinger Band upper
+    bb_middle: Mapped[float | None] = mapped_column(Float)  # = SMA 20
+    bb_lower: Mapped[float | None] = mapped_column(Float)  # Bollinger Band lower
+    bb_bandwidth: Mapped[float | None] = mapped_column(Float)
+    atr_14: Mapped[float | None] = mapped_column(Float)  # Average True Range
 
     # Volume
-    volume_ratio_20d: Mapped[Optional[float]] = mapped_column(Float)  # volume / 20d avg volume
+    volume_ratio_20d: Mapped[float | None] = mapped_column(Float)  # volume / 20d avg volume
 
     # Relative strength vs SPY
-    rs_vs_spy_20d: Mapped[Optional[float]] = mapped_column(Float)  # % return relative to SPY
+    rs_vs_spy_20d: Mapped[float | None] = mapped_column(Float)  # % return relative to SPY
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="technical_snapshots")
+    ticker: Mapped[Ticker] = relationship(back_populates="technical_snapshots")
 
     __table_args__ = (
         UniqueConstraint("ticker_id", "date", name="uq_tech_ticker_date"),
@@ -250,6 +265,7 @@ class TechnicalSnapshot(Base):
 # 4. Filing — SEC filing metadata
 # ---------------------------------------------------------------------------
 
+
 class Filing(Base):
     __tablename__ = "filings"
 
@@ -259,24 +275,22 @@ class Filing(Base):
     )
 
     filing_type: Mapped[str] = mapped_column(String(20), nullable=False)
-    period_of_report: Mapped[Optional[date]] = mapped_column(Date)
-    filed_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
-    accession_number: Mapped[Optional[str]] = mapped_column(String(50), unique=True)
-    primary_document_url: Mapped[Optional[str]] = mapped_column(Text)
+    period_of_report: Mapped[date | None] = mapped_column(Date)
+    filed_date: Mapped[date | None] = mapped_column(Date, index=True)
+    accession_number: Mapped[str | None] = mapped_column(String(50), unique=True)
+    primary_document_url: Mapped[str | None] = mapped_column(Text)
 
     # Deduplication: skip re-download if hash matches
-    raw_text_hash: Mapped[Optional[str]] = mapped_column(String(64))  # SHA-256 hex
+    raw_text_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256 hex
 
     # Processing status
     is_parsed: Mapped[bool] = mapped_column(Boolean, default=False)
     is_analyzed: Mapped[bool] = mapped_column(Boolean, default=False)
-    parse_error: Mapped[Optional[str]] = mapped_column(Text)
+    parse_error: Mapped[str | None] = mapped_column(Text)
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="filings")
-    sections: Mapped[list["FilingSection"]] = relationship(back_populates="filing")
-    analysis: Mapped[Optional["FilingAnalysis"]] = relationship(
-        back_populates="filing", uselist=False
-    )
+    ticker: Mapped[Ticker] = relationship(back_populates="filings")
+    sections: Mapped[list[FilingSection]] = relationship(back_populates="filing")
+    analysis: Mapped[FilingAnalysis | None] = relationship(back_populates="filing", uselist=False)
 
     __table_args__ = (
         Index("ix_filings_ticker_type_date", "ticker_id", "filing_type", "filed_date"),
@@ -287,6 +301,7 @@ class Filing(Base):
 # 5. FilingSection — extracted sections from filings
 # ---------------------------------------------------------------------------
 
+
 class FilingSection(Base):
     __tablename__ = "filing_sections"
 
@@ -295,19 +310,18 @@ class FilingSection(Base):
         Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False
     )
     section_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    content: Mapped[Optional[str]] = mapped_column(Text)
-    word_count: Mapped[Optional[int]] = mapped_column(Integer)
+    content: Mapped[str | None] = mapped_column(Text)
+    word_count: Mapped[int | None] = mapped_column(Integer)
 
-    filing: Mapped["Filing"] = relationship(back_populates="sections")
+    filing: Mapped[Filing] = relationship(back_populates="sections")
 
-    __table_args__ = (
-        Index("ix_sections_filing_name", "filing_id", "section_name"),
-    )
+    __table_args__ = (Index("ix_sections_filing_name", "filing_id", "section_name"),)
 
 
 # ---------------------------------------------------------------------------
 # 6. FilingAnalysis — Claude Sonnet analysis output
 # ---------------------------------------------------------------------------
+
 
 class FilingAnalysis(Base):
     __tablename__ = "filing_analyses"
@@ -317,21 +331,22 @@ class FilingAnalysis(Base):
         Integer, ForeignKey("filings.id", ondelete="CASCADE"), nullable=False, unique=True
     )
 
-    health_score: Mapped[Optional[float]] = mapped_column(Float)  # 0-100
-    red_flags: Mapped[Optional[list]] = mapped_column(JsonType)    # list of {flag, severity, quote}
-    financial_metrics: Mapped[Optional[dict]] = mapped_column(JsonType)  # extracted KPIs
-    summary: Mapped[Optional[str]] = mapped_column(Text)          # 500-word analyst summary
-    bull_points: Mapped[Optional[list]] = mapped_column(JsonType)  # list of strings
-    bear_points: Mapped[Optional[list]] = mapped_column(JsonType)  # list of strings
-    analyzed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    model_used: Mapped[Optional[str]] = mapped_column(String(50))
+    health_score: Mapped[float | None] = mapped_column(Float)  # 0-100
+    red_flags: Mapped[list | None] = mapped_column(JsonType)  # list of {flag, severity, quote}
+    financial_metrics: Mapped[dict | None] = mapped_column(JsonType)  # extracted KPIs
+    summary: Mapped[str | None] = mapped_column(Text)  # 500-word analyst summary
+    bull_points: Mapped[list | None] = mapped_column(JsonType)  # list of strings
+    bear_points: Mapped[list | None] = mapped_column(JsonType)  # list of strings
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    model_used: Mapped[str | None] = mapped_column(String(50))
 
-    filing: Mapped["Filing"] = relationship(back_populates="analysis")
+    filing: Mapped[Filing] = relationship(back_populates="analysis")
 
 
 # ---------------------------------------------------------------------------
 # 7. FinancialMetric — time-series of extracted financial metrics
 # ---------------------------------------------------------------------------
+
 
 class FinancialMetric(Base):
     __tablename__ = "financial_metrics"
@@ -341,18 +356,17 @@ class FinancialMetric(Base):
         Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
     )
     period: Mapped[str] = mapped_column(String(20), nullable=False)  # e.g., "2024-Q3", "2024-FY"
-    period_end_date: Mapped[Optional[date]] = mapped_column(Date)
+    period_end_date: Mapped[date | None] = mapped_column(Date)
     metric_name: Mapped[str] = mapped_column(String(100), nullable=False)
-    value: Mapped[Optional[Decimal]] = mapped_column(Numeric(20, 4))
-    unit: Mapped[Optional[str]] = mapped_column(String(20))   # "USD", "%", "ratio"
-    source: Mapped[Optional[str]] = mapped_column(String(50)) # "10-K", "10-Q", "xbrl"
+    value: Mapped[Decimal | None] = mapped_column(Numeric(20, 4))
+    unit: Mapped[str | None] = mapped_column(String(20))  # "USD", "%", "ratio"
+    source: Mapped[str | None] = mapped_column(String(50))  # "10-K", "10-Q", "xbrl"
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="financial_metrics")
+    ticker: Mapped[Ticker] = relationship(back_populates="financial_metrics")
 
     __table_args__ = (
         UniqueConstraint(
-            "ticker_id", "period", "metric_name",
-            name="uq_financial_metrics_ticker_period_name"
+            "ticker_id", "period", "metric_name", name="uq_financial_metrics_ticker_period_name"
         ),
         Index("ix_financial_metrics_ticker_period", "ticker_id", "period"),
     )
@@ -362,6 +376,7 @@ class FinancialMetric(Base):
 # 8. NewsArticle — aggregated news with sentiment scoring
 # ---------------------------------------------------------------------------
 
+
 class NewsArticle(Base):
     __tablename__ = "news_articles"
 
@@ -369,35 +384,34 @@ class NewsArticle(Base):
 
     # ticker_ids: list of Ticker.id values this article mentions
     # Uses ARRAY on PostgreSQL, JSON on SQLite
-    ticker_ids: Mapped[Optional[list]] = mapped_column(IntArrayType)
+    ticker_ids: Mapped[list | None] = mapped_column(IntArrayType)
 
     source_tier: Mapped[int] = mapped_column(Integer, default=3)  # 1=SEC, 2=T1, 3=T2, 4=Social
-    source_name: Mapped[Optional[str]] = mapped_column(String(100))
+    source_name: Mapped[str | None] = mapped_column(String(100))
     title: Mapped[str] = mapped_column(Text, nullable=False)
-    url: Mapped[Optional[str]] = mapped_column(Text)
-    published_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), index=True)
+    url: Mapped[str | None] = mapped_column(Text)
+    published_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
     fetched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=sa.func.now()
     )
 
     # Content
-    summary: Mapped[Optional[str]] = mapped_column(Text)
-    full_text: Mapped[Optional[str]] = mapped_column(Text)
-    raw_content_hash: Mapped[Optional[str]] = mapped_column(String(64), unique=True, index=True)
+    summary: Mapped[str | None] = mapped_column(Text)
+    full_text: Mapped[str | None] = mapped_column(Text)
+    raw_content_hash: Mapped[str | None] = mapped_column(String(64), unique=True, index=True)
 
     # Sentiment scoring
-    sentiment_score: Mapped[Optional[float]] = mapped_column(Float)  # -1.0 to +1.0
-    sentiment_scored_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    sentiment_model: Mapped[Optional[str]] = mapped_column(String(50))
+    sentiment_score: Mapped[float | None] = mapped_column(Float)  # -1.0 to +1.0
+    sentiment_scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    sentiment_model: Mapped[str | None] = mapped_column(String(50))
 
-    __table_args__ = (
-        Index("ix_news_published_tier", "published_at", "source_tier"),
-    )
+    __table_args__ = (Index("ix_news_published_tier", "published_at", "source_tier"),)
 
 
 # ---------------------------------------------------------------------------
 # 9. InsiderTrade — SEC Form 4 derived data
 # ---------------------------------------------------------------------------
+
 
 class InsiderTrade(Base):
     __tablename__ = "insider_trades"
@@ -406,28 +420,27 @@ class InsiderTrade(Base):
     ticker_id: Mapped[int] = mapped_column(
         Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
     )
-    accession_number: Mapped[Optional[str]] = mapped_column(String(50), unique=True)
+    accession_number: Mapped[str | None] = mapped_column(String(50), unique=True)
 
     insider_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    insider_title: Mapped[Optional[str]] = mapped_column(String(100))
+    insider_title: Mapped[str | None] = mapped_column(String(100))
     trade_type: Mapped[str] = mapped_column(String(20), nullable=False)  # buy/sell/grant/exercise
-    shares: Mapped[Optional[float]] = mapped_column(Float)
-    price_per_share: Mapped[Optional[float]] = mapped_column(Float)
-    total_amount: Mapped[Optional[float]] = mapped_column(Float)  # shares * price
-    shares_owned_after: Mapped[Optional[float]] = mapped_column(Float)
-    filed_date: Mapped[Optional[date]] = mapped_column(Date, index=True)
-    transaction_date: Mapped[Optional[date]] = mapped_column(Date)
+    shares: Mapped[float | None] = mapped_column(Float)
+    price_per_share: Mapped[float | None] = mapped_column(Float)
+    total_amount: Mapped[float | None] = mapped_column(Float)  # shares * price
+    shares_owned_after: Mapped[float | None] = mapped_column(Float)
+    filed_date: Mapped[date | None] = mapped_column(Date, index=True)
+    transaction_date: Mapped[date | None] = mapped_column(Date)
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="insider_trades")
+    ticker: Mapped[Ticker] = relationship(back_populates="insider_trades")
 
-    __table_args__ = (
-        Index("ix_insider_trades_ticker_date", "ticker_id", "filed_date"),
-    )
+    __table_args__ = (Index("ix_insider_trades_ticker_date", "ticker_id", "filed_date"),)
 
 
 # ---------------------------------------------------------------------------
 # 10. InstitutionalHolding — 13F-HR derived data
 # ---------------------------------------------------------------------------
+
 
 class InstitutionalHolding(Base):
     __tablename__ = "institutional_holdings"
@@ -437,19 +450,21 @@ class InstitutionalHolding(Base):
         Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
     )
     institution_name: Mapped[str] = mapped_column(String(255), nullable=False)
-    institution_cik: Mapped[Optional[str]] = mapped_column(String(20))
-    shares: Mapped[Optional[float]] = mapped_column(Float)
-    market_value: Mapped[Optional[float]] = mapped_column(Float)
+    institution_cik: Mapped[str | None] = mapped_column(String(20))
+    shares: Mapped[float | None] = mapped_column(Float)
+    market_value: Mapped[float | None] = mapped_column(Float)
     period_date: Mapped[date] = mapped_column(Date, nullable=False)
-    change_shares: Mapped[Optional[float]] = mapped_column(Float)   # vs prior quarter
-    change_pct: Mapped[Optional[float]] = mapped_column(Float)      # %
+    change_shares: Mapped[float | None] = mapped_column(Float)  # vs prior quarter
+    change_pct: Mapped[float | None] = mapped_column(Float)  # %
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="institutional_holdings")
+    ticker: Mapped[Ticker] = relationship(back_populates="institutional_holdings")
 
     __table_args__ = (
         UniqueConstraint(
-            "ticker_id", "institution_cik", "period_date",
-            name="uq_institutional_ticker_inst_period"
+            "ticker_id",
+            "institution_cik",
+            "period_date",
+            name="uq_institutional_ticker_inst_period",
         ),
         Index("ix_institutional_ticker_period", "ticker_id", "period_date"),
     )
@@ -458,6 +473,7 @@ class InstitutionalHolding(Base):
 # ---------------------------------------------------------------------------
 # 11. Alert — generated alerts from the rule engine
 # ---------------------------------------------------------------------------
+
 
 class Alert(Base):
     __tablename__ = "alerts"
@@ -469,21 +485,19 @@ class Alert(Base):
 
     alert_type: Mapped[str] = mapped_column(String(50), nullable=False)
     severity: Mapped[str] = mapped_column(String(20), nullable=False)  # green/yellow/red
-    score: Mapped[Optional[float]] = mapped_column(Float)  # 0-100
+    score: Mapped[float | None] = mapped_column(Float)  # 0-100
 
     title: Mapped[str] = mapped_column(String(500), nullable=False)
-    body: Mapped[Optional[str]] = mapped_column(Text)
-    context_json: Mapped[Optional[dict]] = mapped_column(JsonType)  # supporting data
+    body: Mapped[str | None] = mapped_column(Text)
+    context_json: Mapped[dict | None] = mapped_column(JsonType)  # supporting data
 
     # State management
-    dismissed_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    snoozed_until: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
+    dismissed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    snoozed_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
 
-    ticker: Mapped["Ticker"] = relationship(back_populates="alerts")
-    dip_score: Mapped[Optional["DipScore"]] = relationship(
-        back_populates="alert", uselist=False
-    )
+    ticker: Mapped[Ticker] = relationship(back_populates="alerts")
+    dip_score: Mapped[DipScore | None] = relationship(back_populates="alert", uselist=False)
 
     __table_args__ = (
         Index("ix_alerts_ticker_severity_created", "ticker_id", "severity", "created_at"),
@@ -494,6 +508,7 @@ class Alert(Base):
 # 12. DipScore — 8-dimension Buy-the-Dip composite score
 # ---------------------------------------------------------------------------
 
+
 class DipScore(Base):
     __tablename__ = "dip_scores"
 
@@ -502,23 +517,24 @@ class DipScore(Base):
         Integer, ForeignKey("alerts.id", ondelete="CASCADE"), nullable=False, unique=True
     )
 
-    price_drop_magnitude: Mapped[Optional[float]] = mapped_column(Float)  # 0-100
-    drop_vs_historical_vol: Mapped[Optional[float]] = mapped_column(Float) # 0-100
-    fundamental_score: Mapped[Optional[float]] = mapped_column(Float)      # 0-100 (filing health)
-    sentiment_context: Mapped[Optional[float]] = mapped_column(Float)      # 0-100
-    insider_activity: Mapped[Optional[float]] = mapped_column(Float)       # 0-100
-    institutional_support: Mapped[Optional[float]] = mapped_column(Float)  # 0-100
-    technical_setup: Mapped[Optional[float]] = mapped_column(Float)        # 0-100 (RSI, support)
-    sector_relative: Mapped[Optional[float]] = mapped_column(Float)        # 0-100
+    price_drop_magnitude: Mapped[float | None] = mapped_column(Float)  # 0-100
+    drop_vs_historical_vol: Mapped[float | None] = mapped_column(Float)  # 0-100
+    fundamental_score: Mapped[float | None] = mapped_column(Float)  # 0-100 (filing health)
+    sentiment_context: Mapped[float | None] = mapped_column(Float)  # 0-100
+    insider_activity: Mapped[float | None] = mapped_column(Float)  # 0-100
+    institutional_support: Mapped[float | None] = mapped_column(Float)  # 0-100
+    technical_setup: Mapped[float | None] = mapped_column(Float)  # 0-100 (RSI, support)
+    sector_relative: Mapped[float | None] = mapped_column(Float)  # 0-100
 
-    composite_score: Mapped[Optional[float]] = mapped_column(Float)        # 0-100, weighted
+    composite_score: Mapped[float | None] = mapped_column(Float)  # 0-100, weighted
 
-    alert: Mapped["Alert"] = relationship(back_populates="dip_score")
+    alert: Mapped[Alert] = relationship(back_populates="dip_score")
 
 
 # ---------------------------------------------------------------------------
 # 13. Thesis — investment thesis definitions (synced from theses.yaml)
 # ---------------------------------------------------------------------------
+
 
 class Thesis(Base):
     __tablename__ = "theses"
@@ -526,16 +542,17 @@ class Thesis(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     slug: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
     name: Mapped[str] = mapped_column(String(255), nullable=False)
-    description: Mapped[Optional[str]] = mapped_column(Text)
-    criteria_yaml: Mapped[Optional[str]] = mapped_column(Text)  # raw YAML string
+    description: Mapped[str | None] = mapped_column(Text)
+    criteria_yaml: Mapped[str | None] = mapped_column(Text)  # raw YAML string
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
-    matches: Mapped[list["ThesisMatch"]] = relationship(back_populates="thesis")
+    matches: Mapped[list[ThesisMatch]] = relationship(back_populates="thesis")
 
 
 # ---------------------------------------------------------------------------
 # 14. ThesisMatch — auto-discovered ticker ↔ thesis alignment scores
 # ---------------------------------------------------------------------------
+
 
 class ThesisMatch(Base):
     __tablename__ = "thesis_matches"
@@ -549,13 +566,13 @@ class ThesisMatch(Base):
     )
 
     score: Mapped[float] = mapped_column(Float, nullable=False)  # 0-100
-    match_reasons: Mapped[Optional[dict]] = mapped_column(JsonType)  # why it matched
+    match_reasons: Mapped[dict | None] = mapped_column(JsonType)  # why it matched
     matched_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), server_default=sa.func.now()
     )
 
-    thesis: Mapped["Thesis"] = relationship(back_populates="matches")
-    ticker: Mapped["Ticker"] = relationship(back_populates="thesis_matches")
+    thesis: Mapped[Thesis] = relationship(back_populates="matches")
+    ticker: Mapped[Ticker] = relationship(back_populates="thesis_matches")
 
     __table_args__ = (
         UniqueConstraint("thesis_id", "ticker_id", name="uq_thesis_matches_thesis_ticker"),
@@ -567,13 +584,14 @@ class ThesisMatch(Base):
 # 15. DailyBriefing — generated daily digest
 # ---------------------------------------------------------------------------
 
+
 class DailyBriefing(Base):
     __tablename__ = "daily_briefings"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     date: Mapped[date] = mapped_column(Date, nullable=False, unique=True)
-    content_md: Mapped[Optional[str]] = mapped_column(Text)    # Markdown version
-    content_html: Mapped[Optional[str]] = mapped_column(Text)  # HTML version
-    market_snapshot: Mapped[Optional[dict]] = mapped_column(JsonType)  # SPY, VIX, etc.
-    delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True))
-    delivery_channels: Mapped[Optional[list]] = mapped_column(JsonType)  # ["email", "slack"]
+    content_md: Mapped[str | None] = mapped_column(Text)  # Markdown version
+    content_html: Mapped[str | None] = mapped_column(Text)  # HTML version
+    market_snapshot: Mapped[dict | None] = mapped_column(JsonType)  # SPY, VIX, etc.
+    delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    delivery_channels: Mapped[list | None] = mapped_column(JsonType)  # ["email", "slack"]

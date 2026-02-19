@@ -17,17 +17,18 @@ import sys
 from logging.config import fileConfig
 from pathlib import Path
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
+
+from alembic import context
 
 # Add project root to sys.path so imports work
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import models so Alembic's autogenerate can see all tables
-from core.models import Base  # noqa: E402
 from config.settings import settings  # noqa: E402
+from core.models import Base  # noqa: E402
 
 # ---------------------------------------------------------------------------
 # Alembic Config
@@ -42,6 +43,7 @@ if config.config_file_name is not None:
 # Set the metadata for autogenerate support
 target_metadata = Base.metadata
 
+
 # Use the DATABASE_URL from settings (not alembic.ini)
 # Convert asyncpg URL to psycopg2 for synchronous Alembic migrations
 def get_sync_url() -> str:
@@ -53,6 +55,7 @@ def get_sync_url() -> str:
 # ---------------------------------------------------------------------------
 # Offline migrations (generates SQL without connecting to DB)
 # ---------------------------------------------------------------------------
+
 
 def run_migrations_offline() -> None:
     """Run migrations without a live DB connection (generates SQL script)."""
@@ -72,6 +75,7 @@ def run_migrations_offline() -> None:
 # ---------------------------------------------------------------------------
 # Online migrations (connects to Neon PostgreSQL)
 # ---------------------------------------------------------------------------
+
 
 def do_run_migrations(connection: Connection) -> None:
     context.configure(

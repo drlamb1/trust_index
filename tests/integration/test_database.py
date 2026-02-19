@@ -7,7 +7,7 @@ No Neon connection required.
 
 from __future__ import annotations
 
-from datetime import date, datetime
+from datetime import date
 
 import pytest
 from sqlalchemy import select
@@ -19,7 +19,6 @@ from core.models import (
     DipScore,
     Filing,
     PriceBar,
-    TechnicalSnapshot,
     Thesis,
     ThesisMatch,
     Ticker,
@@ -164,9 +163,7 @@ class TestAlertCRUD:
         db_session.add(alert)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Alert).where(Alert.ticker_id == sample_ticker.id)
-        )
+        result = await db_session.execute(select(Alert).where(Alert.ticker_id == sample_ticker.id))
         fetched = result.scalar_one()
         assert fetched.severity == "red"
         assert fetched.score == pytest.approx(87.5)
@@ -194,9 +191,7 @@ class TestAlertCRUD:
         db_session.add(dip)
         await db_session.commit()
 
-        result = await db_session.execute(
-            select(Alert).where(Alert.id == alert.id)
-        )
+        result = await db_session.execute(select(Alert).where(Alert.id == alert.id))
         fetched_alert = result.scalar_one()
         # Relationship should be accessible (if loaded)
         assert fetched_alert.id == alert.id

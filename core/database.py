@@ -25,10 +25,8 @@ Usage:
 
 from __future__ import annotations
 
-import asyncio
 import logging
 from collections.abc import AsyncGenerator
-from contextlib import asynccontextmanager
 
 import tenacity
 from sqlalchemy.exc import OperationalError
@@ -80,6 +78,7 @@ AsyncSessionLocal = async_sessionmaker(
 # FastAPI dependency
 # ---------------------------------------------------------------------------
 
+
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     """
     FastAPI dependency that yields an async database session.
@@ -102,6 +101,7 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 # ---------------------------------------------------------------------------
 # Resilient query execution (handles Neon cold starts)
 # ---------------------------------------------------------------------------
+
 
 @tenacity.retry(
     stop=tenacity.stop_after_attempt(3),
@@ -132,6 +132,7 @@ async def execute_with_retry(session: AsyncSession, stmt):
 # Startup health check
 # ---------------------------------------------------------------------------
 
+
 async def check_db_connection() -> bool:
     """
     Ping the database. Used on FastAPI startup to warm up Neon connection.
@@ -152,6 +153,7 @@ async def check_db_connection() -> bool:
 # ---------------------------------------------------------------------------
 # Alembic helper (used in alembic/env.py)
 # ---------------------------------------------------------------------------
+
 
 def get_sync_database_url() -> str:
     """
