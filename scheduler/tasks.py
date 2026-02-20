@@ -468,57 +468,296 @@ def task_db_keepalive() -> dict:
 
 
 @celery_app.task(name="scheduler.tasks.task_fetch_new_filings")
-def task_fetch_new_filings() -> dict:
-    logger.info("task_fetch_new_filings — stub (implement in Phase 2)")
-    return {"status": "stub"}
+def task_fetch_new_filings(limit_per_ticker: int = 3) -> dict:
+    """Fetch recent EDGAR filings (10-K, 10-Q, 8-K) for all tickers with a CIK."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.sec_edgar import fetch_filings_for_ticker
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Ticker).where(Ticker.is_active.is_(True), Ticker.cik.isnot(None))
+            )
+            tickers = result.scalars().all()
+
+            total = 0
+            for ticker in tickers:
+                filings = await fetch_filings_for_ticker(
+                    session, ticker, filing_types=["10-K", "10-Q", "8-K"], limit=limit_per_ticker
+                )
+                total += len(filings)
+
+            await session.commit()
+            return {"tickers_processed": len(tickers), "filings_fetched": total}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_new_filings failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_aggregate_news")
-def task_aggregate_news() -> dict:
-    logger.info("task_aggregate_news — stub (implement in Phase 3)")
-    return {"status": "stub"}
+def task_aggregate_news(days: int = 7) -> dict:
+    """Aggregate news from RSS, Finnhub, and NewsAPI for all active tickers."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.news_feed import aggregate_news_batch
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
+            tickers = list(result.scalars().all())
+
+            finnhub_key = settings.finnhub_api_key if settings.has_finnhub else ""
+            newsapi_key = getattr(settings, "news_api_key", "")
+
+            total = await aggregate_news_batch(
+                session,
+                tickers=tickers,
+                finnhub_api_key=finnhub_key,
+                newsapi_key=newsapi_key,
+                days=days,
+            )
+            await session.commit()
+            return {"tickers_processed": len(tickers), "articles_inserted": total}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_aggregate_news failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_fetch_insider_trades")
-def task_fetch_insider_trades() -> dict:
-    logger.info("task_fetch_insider_trades — stub (implement in Phase 2)")
-    return {"status": "stub"}
+def task_fetch_insider_trades(limit_per_ticker: int = 20) -> dict:
+    """Fetch Form 4 insider trades for all watchlist tickers."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.insider_trades import fetch_and_store_insider_trades
+        from ingestion.sec_edgar import update_ticker_cik
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Ticker).where(Ticker.is_active.is_(True), Ticker.in_watchlist.is_(True))
+            )
+            tickers = result.scalars().all()
+
+            total = 0
+            for ticker in tickers:
+                if not ticker.cik:
+                    await update_ticker_cik(session, ticker)
+                    if not ticker.cik:
+                        continue
+                count = await fetch_and_store_insider_trades(
+                    session, ticker, limit=limit_per_ticker
+                )
+                total += count
+
+            await session.commit()
+            return {"tickers_processed": len(tickers), "trades_stored": total}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_insider_trades failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_fetch_institutional")
 def task_fetch_institutional() -> dict:
-    logger.info("task_fetch_institutional — stub (implement in Phase 2)")
+    logger.info(
+        "task_fetch_institutional — stub (implement in Phase 2: requires institution CIK list)"
+    )
     return {"status": "stub"}
 
 
 @celery_app.task(name="scheduler.tasks.task_sync_earnings_calendar")
-def task_sync_earnings_calendar() -> dict:
-    logger.info("task_sync_earnings_calendar — stub (implement in Phase 3)")
-    return {"status": "stub"}
+def task_sync_earnings_calendar(lookahead_days: int = 30, lookback_days: int = 7) -> dict:
+    """Fetch upcoming earnings calendar for all active tickers."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.earnings_calendar import fetch_earnings_for_tickers
+
+        if not settings.has_finnhub:
+            return {"status": "skipped", "reason": "no Finnhub API key"}
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Ticker.symbol).where(Ticker.is_active.is_(True)))
+            symbols = [row[0] for row in result.fetchall()]
+
+        calendar = await fetch_earnings_for_tickers(
+            symbols=symbols,
+            api_key=settings.finnhub_api_key,
+            lookback_days=lookback_days,
+            lookahead_days=lookahead_days,
+        )
+        upcoming = calendar.upcoming(days=lookahead_days)
+        return {
+            "total_events": len(calendar.events),
+            "upcoming_7d": len(calendar.upcoming(days=7)),
+            "symbols_with_earnings": [e.symbol for e in upcoming[:20]],
+        }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_sync_earnings_calendar failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_analyze_pending_filings")
-def task_analyze_pending_filings() -> dict:
-    logger.info("task_analyze_pending_filings — stub (implement in Phase 2)")
-    return {"status": "stub"}
+def task_analyze_pending_filings(limit: int = 20) -> dict:
+    """Run filing analyzer (Stage 1 regex + optional Stage 2 Claude) on pending filings."""
+
+    async def _run():
+        from analysis.filing_analyzer import analyze_pending_filings
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+
+        api_key = settings.anthropic_api_key if settings.has_anthropic else None
+
+        async with AsyncSessionLocal() as session:
+            count = await analyze_pending_filings(session, anthropic_api_key=api_key, limit=limit)
+            await session.commit()
+            return {"filings_analyzed": count}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_analyze_pending_filings failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_run_sentiment_batch")
-def task_run_sentiment_batch() -> dict:
-    logger.info("task_run_sentiment_batch — stub (implement in Phase 3)")
-    return {"status": "stub"}
+def task_run_sentiment_batch(limit: int = 500) -> dict:
+    """Score unscored news articles using Claude Haiku Batches API."""
+
+    async def _run():
+        from analysis.sentiment import run_sentiment_pipeline
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+
+        if not settings.has_anthropic:
+            return {"status": "skipped", "reason": "no Anthropic API key"}
+
+        async with AsyncSessionLocal() as session:
+            scored = await run_sentiment_pipeline(
+                session,
+                api_key=settings.anthropic_api_key,
+                limit=limit,
+                use_batches=True,
+            )
+            await session.commit()
+            return {"articles_scored": scored}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_run_sentiment_batch failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_detect_anomalies")
-def task_detect_anomalies() -> dict:
-    logger.info("task_detect_anomalies — stub (implement in Phase 3)")
-    return {"status": "stub"}
+def task_detect_anomalies(lookback_days: int = 60) -> dict:
+    """Run price/volume anomaly detection for all active tickers."""
+
+    async def _run():
+        from datetime import date, timedelta
+
+        import pandas as pd
+        from sqlalchemy import select
+
+        from analysis.anomaly_detector import scan_and_store
+        from core.database import AsyncSessionLocal
+        from core.models import PriceBar, Ticker
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
+            tickers = list(result.scalars().all())
+
+            cutoff = date.today() - timedelta(days=lookback_days)
+            total_alerts = 0
+
+            for ticker in tickers:
+                bars_result = await session.execute(
+                    select(PriceBar)
+                    .where(PriceBar.ticker_id == ticker.id, PriceBar.date >= cutoff)
+                    .order_by(PriceBar.date.asc())
+                )
+                bars = bars_result.scalars().all()
+                if len(bars) < 5:
+                    continue
+
+                df = pd.DataFrame(
+                    [
+                        {
+                            "date": b.date,
+                            "open": b.open,
+                            "high": b.high,
+                            "low": b.low,
+                            "close": b.close,
+                            "volume": b.volume,
+                        }
+                        for b in bars
+                    ]
+                )
+                count = await scan_and_store(session, ticker, df)
+                total_alerts += count
+
+            await session.commit()
+            return {"tickers_scanned": len(tickers), "alerts_created": total_alerts}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_detect_anomalies failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_compute_sector_rotation")
 def task_compute_sector_rotation() -> dict:
-    logger.info("task_compute_sector_rotation — stub (implement in Phase 3)")
-    return {"status": "stub"}
+    """Compute SPDR sector ETF relative strength and detect market regime."""
+
+    async def _run():
+        from analysis.sector_rotation import build_sector_snapshot, fetch_sector_prices
+
+        price_dfs = await fetch_sector_prices(lookback_days=300)
+        if not price_dfs:
+            return {"status": "error", "reason": "no price data fetched"}
+
+        spy_df = price_dfs.pop("SPY", None)
+        snapshot = build_sector_snapshot(price_dfs, spy_df=spy_df)
+
+        return {
+            "regime": snapshot.regime,
+            "top_3_sectors": [s.symbol for s in snapshot.ranked[:3]],
+            "bottom_3_sectors": [s.symbol for s in snapshot.ranked[-3:]],
+            "spy_return_20d": snapshot.spy_return_20d,
+        }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_compute_sector_rotation failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_run_thesis_matching")

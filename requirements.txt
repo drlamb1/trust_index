@@ -61,6 +61,7 @@ beautifulsoup4==4.12.3
 # CLI & configuration
 # -----------------------------------------------------------------------------
 typer==0.12.5
+click>=8.0.0,<8.2.0           # Pin: Typer 0.12.5 incompatible with Click 8.3+
 pyyaml==6.0.2
 python-dotenv==1.0.1
 rich==13.9.2             # Typer uses this for pretty output

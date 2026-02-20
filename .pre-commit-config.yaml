@@ -25,6 +25,7 @@ repos:
     hooks:
       - id: detect-secrets
         args: [--baseline, .secrets.baseline]
+        exclude: ^tests/
 
   # Unit tests — fast tests only (no DB, no network)
   - repo: local

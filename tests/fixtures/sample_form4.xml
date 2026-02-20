@@ -1,0 +1,111 @@
+<?xml version="1.0"?>
+<ownershipDocument>
+  <schemaVersion>X0407</schemaVersion>
+  <documentType>4</documentType>
+  <periodOfReport>2024-01-15</periodOfReport>
+
+  <issuer>
+    <issuerCik>0001045810</issuerCik>
+    <issuerName>NVIDIA CORP</issuerName>
+    <issuerTradingSymbol>NVDA</issuerTradingSymbol>
+  </issuer>
+
+  <reportingOwner>
+    <reportingOwnerId>
+      <rptOwnerCik>0001404644</rptOwnerCik>
+      <rptOwnerName>HUANG JEN-HSUN</rptOwnerName>
+    </reportingOwnerId>
+    <reportingOwnerAddress>
+      <rptOwnerStreet1>2788 SAN TOMAS EXPRESSWAY</rptOwnerStreet1>
+      <rptOwnerCity>SANTA CLARA</rptOwnerCity>
+      <rptOwnerState>CA</rptOwnerState>
+      <rptOwnerZipCode>95051</rptOwnerZipCode>
+    </reportingOwnerAddress>
+    <reportingOwnerRelationship>
+      <isDirector>0</isDirector>
+      <isOfficer>1</isOfficer>
+      <isTenPercentOwner>0</isTenPercentOwner>
+      <isOther>0</isOther>
+      <officerTitle>President and CEO</officerTitle>
+    </reportingOwnerRelationship>
+  </reportingOwner>
+
+  <nonDerivativeTable>
+    <nonDerivativeTransaction>
+      <securityTitle>
+        <value>Common Stock</value>
+      </securityTitle>
+      <transactionDate>
+        <value>2024-01-15</value>
+      </transactionDate>
+      <transactionCoding>
+        <transactionFormType>4</transactionFormType>
+        <transactionCode>P</transactionCode>
+        <equitySwapInvolved>0</equitySwapInvolved>
+      </transactionCoding>
+      <transactionAmounts>
+        <transactionShares>
+          <value>100000</value>
+          <footnoteId id="F1"/>
+        </transactionShares>
+        <transactionPricePerShare>
+          <value>495.50</value>
+        </transactionPricePerShare>
+        <transactionAcquiredDisposedCode>
+          <value>A</value>
+        </transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <postTransactionAmounts>
+        <sharesOwnedFollowingTransaction>
+          <value>86920949</value>
+        </sharesOwnedFollowingTransaction>
+      </postTransactionAmounts>
+      <ownershipNature>
+        <directOrIndirectOwnership>
+          <value>D</value>
+        </directOrIndirectOwnership>
+      </ownershipNature>
+    </nonDerivativeTransaction>
+
+    <nonDerivativeTransaction>
+      <securityTitle>
+        <value>Common Stock</value>
+      </securityTitle>
+      <transactionDate>
+        <value>2024-01-20</value>
+      </transactionDate>
+      <transactionCoding>
+        <transactionFormType>4</transactionFormType>
+        <transactionCode>S</transactionCode>
+        <equitySwapInvolved>0</equitySwapInvolved>
+      </transactionCoding>
+      <transactionAmounts>
+        <transactionShares>
+          <value>50000</value>
+        </transactionShares>
+        <transactionPricePerShare>
+          <value>612.75</value>
+        </transactionPricePerShare>
+        <transactionAcquiredDisposedCode>
+          <value>D</value>
+        </transactionAcquiredDisposedCode>
+      </transactionAmounts>
+      <postTransactionAmounts>
+        <sharesOwnedFollowingTransaction>
+          <value>86870949</value>
+        </sharesOwnedFollowingTransaction>
+      </postTransactionAmounts>
+      <ownershipNature>
+        <directOrIndirectOwnership>
+          <value>D</value>
+        </directOrIndirectOwnership>
+      </ownershipNature>
+    </nonDerivativeTransaction>
+  </nonDerivativeTable>
+
+  <derivativeTable/>
+
+  <footnotes>
+    <footnote id="F1">Shares acquired pursuant to a performance stock unit award.</footnote>
+  </footnotes>
+</ownershipDocument>

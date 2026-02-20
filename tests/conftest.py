@@ -278,8 +278,10 @@ def mock_alpha_vantage_success(httpx_mock):
             "6. volume": str(int(row["volume"])),
         }
 
+    import re
+
     httpx_mock.add_response(
-        url__regex=r"https://www.alphavantage.co/.*",
+        url=re.compile(r"https://www.alphavantage.co/.*"),
         json={"Time Series (Daily)": time_series},
     )
 

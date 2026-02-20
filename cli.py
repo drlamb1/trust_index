@@ -395,15 +395,190 @@ def ingest_prices(
 
 @ingest_app.command("filings")
 def ingest_filings(
-    ticker: str | None = typer.Argument(None, help="Single ticker (default: all)"),
+    ticker: str | None = typer.Argument(None, help="Single ticker (default: all active)"),
     filing_type: str = typer.Option("10-K", "--type", "-t", help="Filing type (10-K, 10-Q, 8-K)"),
-    years: int = typer.Option(1, "--years", help="Years of filings to fetch"),
+    limit: int = typer.Option(5, "--limit", "-l", help="Max filings per ticker"),
+    analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run analysis after fetch"),
 ):
-    """Fetch SEC filings. (Phase 2 — not yet implemented)"""
-    console.print(
-        "[yellow]Filing ingestion will be available in Phase 2.[/yellow]\n"
-        "Track progress at: github.com/your-repo/edgefinder"
-    )
+    """Fetch and parse SEC EDGAR filings."""
+
+    async def _ingest():
+        from sqlalchemy import select
+
+        from analysis.filing_analyzer import analyze_pending_filings
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.sec_edgar import fetch_filings_for_ticker, update_ticker_cik
+
+        async with AsyncSessionLocal() as session:
+            if ticker:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.symbol == ticker.upper())
+                )
+                tickers_to_process = [result.scalar_one_or_none()]
+                if not tickers_to_process[0]:
+                    console.print(f"[red]Ticker {ticker.upper()} not found.[/red]")
+                    return
+            else:
+                result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
+                tickers_to_process = list(result.scalars().all())
+
+            console.print(f"Processing {len(tickers_to_process)} ticker(s)...")
+            total_filings = 0
+
+            for t in tickers_to_process:
+                if not t.cik:
+                    console.print(f"  [{t.symbol}] Looking up CIK...")
+                    found = await update_ticker_cik(session, t)
+                    if not found:
+                        console.print(f"  [{t.symbol}] CIK not found — skipping")
+                        continue
+
+                with console.status(f"  Fetching {filing_type} for {t.symbol}..."):
+                    filings = await fetch_filings_for_ticker(
+                        session, t, filing_types=[filing_type], limit=limit
+                    )
+
+                console.print(f"  [green]✓ {t.symbol}: {len(filings)} filings[/green]")
+                total_filings += len(filings)
+
+            if analyze and total_filings:
+                api_key = settings.anthropic_api_key if settings.has_anthropic else None
+                label = "Claude + regex" if api_key else "regex only"
+                with console.status(f"Analyzing filings ({label})..."):
+                    analyzed = await analyze_pending_filings(
+                        session, anthropic_api_key=api_key, limit=total_filings
+                    )
+                console.print(f"  [cyan]↳ {analyzed} filings analyzed[/cyan]")
+
+            await session.commit()
+            console.print(f"\n[bold green]✓ Ingested {total_filings} total filings.[/bold green]")
+
+    run(_ingest())
+
+
+@ingest_app.command("insider-trades")
+def ingest_insider_trades(
+    ticker: str | None = typer.Argument(None, help="Single ticker (default: watchlist)"),
+    limit: int = typer.Option(20, "--limit", "-l", help="Max Form 4 filings per ticker"),
+):
+    """Fetch Form 4 insider trade filings."""
+
+    async def _ingest():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.insider_trades import fetch_and_store_insider_trades
+        from ingestion.sec_edgar import update_ticker_cik
+
+        async with AsyncSessionLocal() as session:
+            if ticker:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.symbol == ticker.upper())
+                )
+                tickers_to_process = [result.scalar_one_or_none()]
+                if not tickers_to_process[0]:
+                    console.print(f"[red]Ticker {ticker.upper()} not found.[/red]")
+                    return
+            else:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.is_active.is_(True), Ticker.in_watchlist.is_(True))
+                )
+                tickers_to_process = list(result.scalars().all())
+
+            total = 0
+            for t in tickers_to_process:
+                if not t.cik:
+                    await update_ticker_cik(session, t)
+                    if not t.cik:
+                        continue
+                count = await fetch_and_store_insider_trades(session, t, limit=limit)
+                if count:
+                    console.print(f"  [green]✓ {t.symbol}: {count} new trades[/green]")
+                total += count
+
+            await session.commit()
+            console.print(f"[bold green]✓ Stored {total} total insider trades.[/bold green]")
+
+    run(_ingest())
+
+
+@ingest_app.command("news")
+def ingest_news(
+    ticker: str | None = typer.Argument(None, help="Single ticker (default: all active)"),
+    days: int = typer.Option(7, "--days", "-d", help="Look-back window in days"),
+    rss_only: bool = typer.Option(False, "--rss-only", help="Skip Finnhub and NewsAPI"),
+):
+    """Aggregate news articles from RSS, Finnhub, and NewsAPI."""
+
+    async def _ingest():
+        from sqlalchemy import select
+
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.news_feed import aggregate_news_batch, aggregate_news_for_ticker
+
+        async with AsyncSessionLocal() as session:
+            if ticker:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.symbol == ticker.upper())
+                )
+                t = result.scalar_one_or_none()
+                if not t:
+                    console.print(f"[red]Ticker {ticker.upper()} not found.[/red]")
+                    return
+
+                finnhub_key = (
+                    "" if rss_only else (settings.finnhub_api_key if settings.has_finnhub else "")
+                )
+                newsapi_key = "" if rss_only else getattr(settings, "news_api_key", "")
+
+                with console.status(f"Fetching news for {t.symbol}..."):
+                    count = await aggregate_news_for_ticker(
+                        session,
+                        t,
+                        finnhub_api_key=finnhub_key,
+                        newsapi_key=newsapi_key,
+                        days=days,
+                    )
+                await session.commit()
+                console.print(f"[green]✓ {t.symbol}: {count} new articles stored[/green]")
+            else:
+                result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
+                tickers_to_process = list(result.scalars().all())
+
+                finnhub_key = (
+                    "" if rss_only else (settings.finnhub_api_key if settings.has_finnhub else "")
+                )
+                newsapi_key = "" if rss_only else getattr(settings, "news_api_key", "")
+
+                sources = []
+                if not rss_only:
+                    if finnhub_key:
+                        sources.append("Finnhub")
+                    if newsapi_key:
+                        sources.append("NewsAPI")
+                sources.append("RSS")
+                console.print(
+                    f"Fetching news for {len(tickers_to_process)} tickers via {', '.join(sources)}..."
+                )
+
+                with console.status("Aggregating news..."):
+                    total = await aggregate_news_batch(
+                        session,
+                        tickers=tickers_to_process,
+                        finnhub_api_key=finnhub_key,
+                        newsapi_key=newsapi_key,
+                        days=days,
+                    )
+
+                await session.commit()
+                console.print(f"[bold green]✓ {total} new articles stored.[/bold green]")
+
+    run(_ingest())
 
 
 # ---------------------------------------------------------------------------
