@@ -1,12 +1,32 @@
-version: "3.9"
-
 # =============================================================================
 # EdgeFinder — Docker Compose
-# Neon PostgreSQL is cloud-managed; this only runs local Redis for development.
-# In production, replace Redis with Upstash (see .env.example).
+# Full local stack: web + worker + Redis.
+# Neon PostgreSQL is cloud-managed (see .env DATABASE_URL).
 # =============================================================================
 
 services:
+  web:
+    build: .
+    container_name: edgefinder-web
+    ports:
+      - "${DASHBOARD_PORT:-8050}:8050"
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: uvicorn api.app:create_app --factory --host 0.0.0.0 --port 8050
+    restart: unless-stopped
+
+  worker:
+    build: .
+    container_name: edgefinder-worker
+    env_file: .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    command: celery -A scheduler.tasks worker -l info -Q ingestion,analysis,alerts,briefings
+    restart: unless-stopped
+
   redis:
     image: redis:7.4-alpine
     container_name: edgefinder-redis
