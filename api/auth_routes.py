@@ -185,6 +185,42 @@ async def me(user: User = Depends(get_current_user)) -> dict:
 
 
 # ---------------------------------------------------------------------------
+# Change password (self-service)
+# ---------------------------------------------------------------------------
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str
+    new_password: str
+
+
+@router.post("/change-password")
+async def change_password(
+    body: ChangePasswordRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Change the current user's password."""
+    if not verify_password(body.current_password, user.hashed_password):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Current password is incorrect",
+        )
+
+    if len(body.new_password) < 8:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="New password must be at least 8 characters",
+        )
+
+    user.hashed_password = hash_password(body.new_password)
+    await db.flush()
+
+    logger.info("User %s changed their password", user.username)
+    return {"message": "Password changed successfully"}
+
+
+# ---------------------------------------------------------------------------
 # Admin: list users
 # ---------------------------------------------------------------------------
 

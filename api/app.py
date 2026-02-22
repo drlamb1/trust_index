@@ -797,7 +797,10 @@ def _briefing_page(content_md: str, for_date: date | None = None, user: User | N
     # User info for topbar
     user_html = ""
     if user:
+        admin_link = '<a href="/admin">admin</a>' if user.role == "admin" else ""
         user_html = (
+            f'{admin_link}'
+            f'<a href="#" onclick="document.getElementById(\'pwModal\').style.display=\'flex\';return false">settings</a>'
             f'<span style="font-size:11px;color:var(--text-dim);margin-right:8px">'
             f'{html.escape(user.username)} ({user.role})</span>'
             f'<a href="/logout">logout</a>'
@@ -831,6 +834,39 @@ def _briefing_page(content_md: str, for_date: date | None = None, user: User | N
     {body_html}
     <div class="footer">Generated {time_display} by EdgeFinder</div>
   </main>
+
+  <!-- Password Change Modal -->
+  <div id="pwModal" style="position:fixed;inset:0;z-index:200;background:rgba(0,0,0,0.6);display:none;align-items:center;justify-content:center"
+       onclick="if(event.target===this)this.style.display='none'">
+    <div style="background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:32px;width:360px;max-width:90vw">
+      <div style="font-size:14px;font-weight:600;margin-bottom:20px">Change Password</div>
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">Current Password</label>
+      <input type="password" id="pwCurrent" style="width:100%;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:16px">
+      <label style="display:block;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--text-dim);margin-bottom:6px">New Password</label>
+      <input type="password" id="pwNew" style="width:100%;font-size:14px;font-family:inherit;background:var(--bg);color:var(--text);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:16px" placeholder="Minimum 8 characters">
+      <div id="pwMsg" style="font-size:13px;margin-bottom:12px;display:none"></div>
+      <div style="display:flex;gap:10px;justify-content:flex-end">
+        <button onclick="document.getElementById('pwModal').style.display='none'" style="background:none;color:var(--text-dim);border:1px solid var(--border);border-radius:8px;padding:10px 20px;font-size:13px;cursor:pointer;font-family:inherit">Cancel</button>
+        <button onclick="changePw()" style="background:var(--accent);color:#fff;border:none;border-radius:8px;padding:10px 20px;font-size:13px;font-weight:600;cursor:pointer">Change Password</button>
+      </div>
+    </div>
+  </div>
+  <script>
+  async function changePw(){{
+    const msg=document.getElementById('pwMsg');
+    const cur=document.getElementById('pwCurrent').value;
+    const nw=document.getElementById('pwNew').value;
+    if(nw.length<8){{msg.style.display='block';msg.style.color='var(--dn)';msg.textContent='Password must be at least 8 characters';return;}}
+    try{{
+      const r=await fetch('/api/auth/change-password',{{method:'POST',headers:{{'Content-Type':'application/json'}},body:JSON.stringify({{current_password:cur,new_password:nw}})}});
+      const d=await r.json();
+      if(!r.ok)throw new Error(d.detail||'Failed');
+      msg.style.display='block';msg.style.color='var(--up)';msg.textContent='Password changed!';
+      document.getElementById('pwCurrent').value='';document.getElementById('pwNew').value='';
+      setTimeout(()=>{{document.getElementById('pwModal').style.display='none';msg.style.display='none';}},1500);
+    }}catch(e){{msg.style.display='block';msg.style.color='var(--dn)';msg.textContent=e.message;}}
+  }}
+  </script>
 
   <!-- Chat Panel -->
   <aside class="chat-overlay" id="chatPanel">
@@ -1246,9 +1282,11 @@ def create_app() -> FastAPI:
     )
 
     # Routers
+    from api.admin_routes import router as admin_router
     from api.auth_routes import router as auth_router
     from api.chat_routes import router as chat_router
 
+    app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(chat_router)
 
@@ -1359,6 +1397,17 @@ def create_app() -> FastAPI:
             content_md = await generate_briefing(session, for_date=for_date)
 
         return PlainTextResponse(content_md, media_type="text/plain; charset=utf-8")
+
+    @app.get("/admin", response_class=HTMLResponse)
+    async def admin_panel(request: Request):
+        user = await _try_get_user(request)
+        if not user or user.role != "admin":
+            return RedirectResponse("/login", status_code=302)
+        from api.admin_page import admin_page_html
+        return HTMLResponse(admin_page_html(
+            current_user_id=user.id,
+            current_username=user.username,
+        ))
 
     return app
 
