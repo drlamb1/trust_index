@@ -76,24 +76,21 @@ def _fetch_yfinance_sync(symbol: str, period: str) -> pd.DataFrame:
     if df.empty:
         return df
 
-    # Normalize column names to lowercase
+    # Reset index first so the DatetimeIndex becomes a regular column.
+    # Must happen before column normalization because the index name is not
+    # in df.columns — it arrives after reset_index as e.g. "Date" or "Datetime"
+    # (yfinance ≥0.2.50 renamed the daily index from "Date" → "Datetime").
+    df = df.reset_index()
+
+    # Normalize all column names to lowercase
     df.columns = [c.lower().replace(" ", "_") for c in df.columns]
 
-    # Reset index so date becomes a column
-    df = df.reset_index()
-    df = df.rename(
-        columns={
-            "date": "date",
-            "open": "open",
-            "high": "high",
-            "low": "low",
-            "close": "close",
-            "volume": "volume",
-        }
-    )
+    # Unify the date column name regardless of yfinance version
+    if "datetime" in df.columns and "date" not in df.columns:
+        df = df.rename(columns={"datetime": "date"})
 
-    # Drop timezone from date index (we store as date, not datetime)
-    if hasattr(df["date"].dtype, "tz"):
+    # Drop timezone and coerce to plain date objects
+    if "date" in df.columns and hasattr(df["date"].dtype, "tz"):
         df["date"] = df["date"].dt.tz_localize(None)
     df["date"] = pd.to_datetime(df["date"]).dt.date
 

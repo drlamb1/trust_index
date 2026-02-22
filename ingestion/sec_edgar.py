@@ -287,6 +287,15 @@ def strip_ixbrl(html_content: str) -> str:
                 if parent is not None:
                     parent.remove(elem)
 
+        # Remove hidden elements — iXBRL filings hide XBRL context/unit
+        # definitions in <div style="display:none"> within <body>
+        for elem in root.xpath(
+            ".//*[contains(@style,'display:none') or contains(@style,'display: none')]"
+        ):
+            parent = elem.getparent()
+            if parent is not None:
+                parent.remove(elem)
+
         # Replace iXBRL namespace elements with their contained text
         for ns in IXBRL_NAMESPACES:
             for elem in root.xpath(f"//*[namespace-uri()='{ns}']"):
@@ -304,14 +313,29 @@ def strip_ixbrl(html_content: str) -> str:
                     prev.tail = (prev.tail or "") + replacement
                 parent.remove(elem)
 
-        # Collect all text nodes
+        # Collect text only from <body> — the <head> contains XBRL schema
+        # metadata (context definitions, namespaces) that is not readable text.
+        body = root.find(".//body")
+        if body is None:
+            body = root  # fallback for non-HTML documents
+
+        # Block-level tags get newlines so section splitting can find Item headings
+        _BLOCK_TAGS = frozenset({
+            "div", "p", "h1", "h2", "h3", "h4", "h5", "h6",
+            "table", "tr", "th", "td", "li", "br", "hr",
+            "section", "article", "blockquote", "pre",
+        })
+
         parts = []
-        for node in root.iter():
+        for node in body.iter():
+            tag = node.tag.lower() if isinstance(node.tag, str) else ""
+            if tag in _BLOCK_TAGS:
+                parts.append("\n")
             if node.text:
                 parts.append(node.text)
             if node.tail:
                 parts.append(node.tail)
-        raw = " ".join(parts)
+        raw = "".join(parts)
 
     except Exception as exc:
         logger.warning("lxml iXBRL strip failed (%s), using regex fallback", exc)

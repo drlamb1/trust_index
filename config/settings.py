@@ -51,6 +51,7 @@ class Settings(BaseSettings):
     finnhub_api_key: str = Field(default="", description="Finnhub API key")
     news_api_key: str = Field(default="", description="NewsAPI.org key")
     fred_api_key: str = Field(default="", description="FRED (St. Louis Fed) API key")
+    fmp_api_key: str = Field(default="", description="Financial Modeling Prep API key")
 
     # -------------------------------------------------------------------------
     # SEC EDGAR — required by SEC data policy
@@ -88,6 +89,19 @@ class Settings(BaseSettings):
     dashboard_port: int = Field(default=8050)
 
     # -------------------------------------------------------------------------
+    # Authentication
+    # -------------------------------------------------------------------------
+    jwt_algorithm: str = Field(default="HS256")
+    access_token_expire_minutes: int = Field(default=1440, description="JWT expiry (default 24h)")
+    registration_enabled: bool = Field(default=False, description="Allow public user registration")
+
+    # -------------------------------------------------------------------------
+    # Production hardening
+    # -------------------------------------------------------------------------
+    cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    chat_rate_limit: str = Field(default="10/minute", description="Rate limit for chat endpoint")
+
+    # -------------------------------------------------------------------------
     # Ingestion limits
     # -------------------------------------------------------------------------
     edgar_rate_limit: float = Field(
@@ -122,6 +136,14 @@ class Settings(BaseSettings):
     def has_finnhub(self) -> bool:
         return bool(self.finnhub_api_key)
 
+    @property
+    def has_fred(self) -> bool:
+        return bool(self.fred_api_key)
+
+    @property
+    def has_fmp(self) -> bool:
+        return bool(self.fmp_api_key)
+
     @field_validator("edgar_user_agent")
     @classmethod
     def validate_edgar_user_agent(cls, v: str) -> str:
@@ -132,6 +154,20 @@ class Settings(BaseSettings):
                 "EDGAR_USER_AGENT is using the placeholder email. "
                 "Set EDGAR_USER_AGENT to 'AppName/Version youremail@domain.com' "
                 "in your .env file. SEC policy requires a valid contact email.",
+                UserWarning,
+                stacklevel=2,
+            )
+        return v
+
+    @field_validator("secret_key")
+    @classmethod
+    def validate_secret_key(cls, v: str) -> str:
+        if v == "change-me-in-production":
+            import warnings
+
+            warnings.warn(
+                "SECRET_KEY is using the default value. "
+                "Generate a secure key: openssl rand -hex 32",
                 UserWarning,
                 stacklevel=2,
             )

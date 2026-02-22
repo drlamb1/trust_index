@@ -44,8 +44,25 @@ logger = logging.getLogger(__name__)
 # Engine
 # ---------------------------------------------------------------------------
 
+# asyncpg doesn't understand the ?sslmode=require query param — strip it
+# from the URL and pass ssl="require" via connect_args instead.
+_db_url = settings.database_url
+if "sslmode=" in _db_url:
+    import re
+
+    _db_url = re.sub(r"[?&]sslmode=[^&]*", "", _db_url)
+
+_connect_args: dict = {
+    "server_settings": {"application_name": "edgefinder"},
+    "command_timeout": 30,
+}
+if "sslmode=require" in settings.database_url:
+    import ssl as _ssl_mod
+
+    _connect_args["ssl"] = _ssl_mod.create_default_context()
+
 engine = create_async_engine(
-    settings.database_url,
+    _db_url,
     pool_size=5,
     max_overflow=2,
     # Critical for Neon: re-tests connection aliveness before using from pool
@@ -53,11 +70,8 @@ engine = create_async_engine(
     # Recycle connections every 5 minutes (Neon pauses after 5 min of inactivity)
     pool_recycle=300,
     # Log SQL in development for debugging
-    echo=settings.environment == "development",
-    connect_args={
-        "server_settings": {"application_name": "edgefinder"},
-        "command_timeout": 30,
-    },
+    echo=False,
+    connect_args=_connect_args,
 )
 
 # ---------------------------------------------------------------------------

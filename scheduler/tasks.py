@@ -85,6 +85,9 @@ celery_app.conf.update(
         "scheduler.tasks.task_compute_sector_rotation": {"queue": "analysis"},
         "scheduler.tasks.task_run_thesis_matching": {"queue": "analysis"},
         "scheduler.tasks.task_db_keepalive": {"queue": "analysis"},
+        "scheduler.tasks.task_fetch_macro_data": {"queue": "ingestion"},
+        "scheduler.tasks.task_fetch_transcripts": {"queue": "ingestion"},
+        "scheduler.tasks.task_analyze_transcripts": {"queue": "analysis"},
         "scheduler.tasks.task_run_alert_engine": {"queue": "alerts"},
         "scheduler.tasks.task_compute_dip_scores": {"queue": "alerts"},
         "scheduler.tasks.task_check_snoozed_alerts": {"queue": "alerts"},
@@ -151,6 +154,18 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=0, hour=6),
         "queue": "ingestion",
     },
+    # FRED macro indicators — daily at 6:30 AM UTC
+    "fetch-macro-data": {
+        "task": "scheduler.tasks.task_fetch_macro_data",
+        "schedule": crontab(minute=30, hour=6),
+        "queue": "ingestion",
+    },
+    # Earnings transcripts — daily at 7:30 AM UTC (after earnings calendar sync)
+    "fetch-transcripts": {
+        "task": "scheduler.tasks.task_fetch_transcripts",
+        "schedule": crontab(minute=30, hour=7),
+        "queue": "ingestion",
+    },
     # ================================================================
     # ANALYSIS QUEUE
     # ================================================================
@@ -188,6 +203,12 @@ celery_app.conf.beat_schedule = {
     "match-theses": {
         "task": "scheduler.tasks.task_run_thesis_matching",
         "schedule": crontab(minute=30, hour=22),
+        "queue": "analysis",
+    },
+    # Earnings transcript analysis — 11 PM UTC daily (after transcripts fetched)
+    "analyze-transcripts": {
+        "task": "scheduler.tasks.task_analyze_transcripts",
+        "schedule": crontab(minute=0, hour=23),
         "queue": "analysis",
     },
     # Neon DB keepalive — every 3 minutes during market hours to prevent cold starts
@@ -586,22 +607,27 @@ def task_fetch_institutional() -> dict:
 
 @celery_app.task(name="scheduler.tasks.task_sync_earnings_calendar")
 def task_sync_earnings_calendar(lookahead_days: int = 30, lookback_days: int = 7) -> dict:
-    """Fetch upcoming earnings calendar for all active tickers."""
+    """Fetch earnings calendar and persist events to DB."""
 
     async def _run():
         from sqlalchemy import select
+        from sqlalchemy.dialects.postgresql import insert as pg_insert
 
         from config.settings import settings
         from core.database import AsyncSessionLocal
-        from core.models import Ticker
+        from core.models import EarningsEventDB, Ticker
         from ingestion.earnings_calendar import fetch_earnings_for_tickers
 
         if not settings.has_finnhub:
             return {"status": "skipped", "reason": "no Finnhub API key"}
 
         async with AsyncSessionLocal() as session:
-            result = await session.execute(select(Ticker.symbol).where(Ticker.is_active.is_(True)))
-            symbols = [row[0] for row in result.fetchall()]
+            result = await session.execute(
+                select(Ticker).where(Ticker.is_active.is_(True))
+            )
+            tickers = result.scalars().all()
+            symbol_to_id = {t.symbol.upper(): t.id for t in tickers}
+            symbols = list(symbol_to_id.keys())
 
         calendar = await fetch_earnings_for_tickers(
             symbols=symbols,
@@ -609,9 +635,51 @@ def task_sync_earnings_calendar(lookahead_days: int = 30, lookback_days: int = 7
             lookback_days=lookback_days,
             lookahead_days=lookahead_days,
         )
+
+        # Persist events to DB
+        stored = 0
+        async with AsyncSessionLocal() as session:
+            for event in calendar.events:
+                ticker_id = symbol_to_id.get(event.symbol.upper())
+                if not ticker_id:
+                    continue
+
+                row = {
+                    "ticker_id": ticker_id,
+                    "event_date": event.date.date() if hasattr(event.date, "date") else event.date,
+                    "hour": event.hour or "",
+                    "eps_estimate": event.eps_estimate,
+                    "eps_actual": event.eps_actual,
+                    "revenue_estimate": event.revenue_estimate,
+                    "revenue_actual": event.revenue_actual,
+                    "source": "finnhub",
+                }
+
+                # Compute surprise percentages for events with actuals
+                if event.eps_surprise_pct is not None:
+                    row["eps_surprise_pct"] = round(event.eps_surprise_pct, 2)
+                if event.revenue_surprise_pct is not None:
+                    row["rev_surprise_pct"] = round(event.revenue_surprise_pct, 2)
+
+                stmt = pg_insert(EarningsEventDB).values(row)
+                stmt = stmt.on_conflict_do_update(
+                    constraint="uq_earnings_ticker_date",
+                    set_={
+                        "eps_actual": stmt.excluded.eps_actual,
+                        "revenue_actual": stmt.excluded.revenue_actual,
+                        "eps_surprise_pct": stmt.excluded.eps_surprise_pct,
+                        "rev_surprise_pct": stmt.excluded.rev_surprise_pct,
+                    },
+                )
+                await session.execute(stmt)
+                stored += 1
+
+            await session.commit()
+
         upcoming = calendar.upcoming(days=lookahead_days)
         return {
             "total_events": len(calendar.events),
+            "persisted": stored,
             "upcoming_7d": len(calendar.upcoming(days=7)),
             "symbols_with_earnings": [e.symbol for e in upcoming[:20]],
         }
@@ -762,35 +830,235 @@ def task_compute_sector_rotation() -> dict:
 
 @celery_app.task(name="scheduler.tasks.task_run_thesis_matching")
 def task_run_thesis_matching() -> dict:
-    logger.info("task_run_thesis_matching — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Run investment thesis matching for all active theses and tickers."""
+
+    async def _run():
+        from analysis.thesis_matcher import run_thesis_matching
+        from core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            total = await run_thesis_matching(session)
+            return {"matches_upserted": total}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_run_thesis_matching failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_fetch_macro_data")
+def task_fetch_macro_data(days: int = 365) -> dict:
+    """Fetch FRED macroeconomic indicators and store to DB."""
+
+    async def _run():
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from ingestion.macro_data import fetch_and_store_macro
+
+        if not settings.has_fred:
+            return {"status": "skipped", "reason": "no FRED API key"}
+
+        async with AsyncSessionLocal() as session:
+            results = await fetch_and_store_macro(session, settings.fred_api_key, days=days)
+            await session.commit()
+            return {
+                "series": results,
+                "total_observations": sum(results.values()),
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_macro_data failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_fetch_transcripts")
+def task_fetch_transcripts(quarters_back: int = 1) -> dict:
+    """Fetch earnings call transcripts (Motley Fool + FMP fallback) for watchlist tickers."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.earnings_transcripts import (
+            discover_and_store_from_sitemap,
+            fetch_and_store_transcripts_batch,
+        )
+
+        fmp_key = settings.fmp_api_key if settings.has_fmp else ""
+
+        async with AsyncSessionLocal() as session:
+            # First: check Motley Fool sitemap for any new transcripts
+            sitemap_count = await discover_and_store_from_sitemap(session, fmp_key)
+
+            # Then: targeted fetch for watchlist tickers
+            result = await session.execute(
+                select(Ticker).where(Ticker.is_active.is_(True), Ticker.in_watchlist.is_(True))
+            )
+            tickers = list(result.scalars().all())
+
+            results = await fetch_and_store_transcripts_batch(
+                session, tickers, fmp_api_key=fmp_key, quarters_back=quarters_back
+            )
+            await session.commit()
+            return {
+                "tickers_processed": len(tickers),
+                "sitemap_discovered": sitemap_count,
+                "transcripts_per_ticker": results,
+                "total_new": sitemap_count + sum(results.values()),
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_transcripts failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_analyze_transcripts")
+def task_analyze_transcripts() -> dict:
+    """Analyze unprocessed earnings call transcripts with Claude."""
+
+    async def _run():
+        from analysis.earnings_analyzer import analyze_unprocessed
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+
+        if not settings.has_anthropic:
+            return {"status": "skipped", "reason": "no Anthropic API key"}
+
+        async with AsyncSessionLocal() as session:
+            count = await analyze_unprocessed(session, settings.anthropic_api_key)
+            await session.commit()
+            return {"transcripts_analyzed": count}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_analyze_transcripts failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_run_alert_engine")
 def task_run_alert_engine() -> dict:
-    logger.info("task_run_alert_engine — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Run rule-based alert engine for all watchlist tickers."""
+
+    async def _run():
+        from alerts.alert_engine import run_alert_engine
+        from core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            created = await run_alert_engine(session)
+            await session.commit()
+            return {"alerts_created": created}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_run_alert_engine failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_compute_dip_scores")
 def task_compute_dip_scores() -> dict:
-    logger.info("task_compute_dip_scores — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Score all watchlist tickers for buy-the-dip opportunities."""
+
+    async def _run():
+        from alerts.buy_the_dip import compute_dip_scores
+        from core.database import AsyncSessionLocal
+
+        async with AsyncSessionLocal() as session:
+            created = await compute_dip_scores(session)
+            await session.commit()
+            return {"alerts_created": created}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_compute_dip_scores failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_check_snoozed_alerts")
 def task_check_snoozed_alerts() -> dict:
-    logger.info("task_check_snoozed_alerts — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Expire snoozed alerts whose snooze window has passed."""
+
+    async def _run():
+        from datetime import datetime, timezone
+
+        from sqlalchemy import update
+
+        from core.database import AsyncSessionLocal
+        from core.models import Alert
+
+        now = datetime.now(timezone.utc)
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                update(Alert)
+                .where(Alert.snoozed_until <= now, Alert.dismissed_at.is_(None))
+                .values(snoozed_until=None)
+                .returning(Alert.id)
+            )
+            expired = len(result.fetchall())
+            await session.commit()
+            return {"snoozed_expired": expired}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_check_snoozed_alerts failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_send_daily_briefing")
 def task_send_daily_briefing() -> dict:
-    logger.info("task_send_daily_briefing — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Generate and deliver the daily market briefing."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from daily_briefing import generate_and_send_briefing
+
+        async with AsyncSessionLocal() as session:
+            result = await generate_and_send_briefing(
+                session, dry_run=False, is_weekly=False
+            )
+            return {
+                "date": result.get("date"),
+                "delivered": result.get("delivery_results", {}),
+                "chars": len(result.get("content_md", "")),
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_send_daily_briefing failed: %s", exc)
+        raise
 
 
 @celery_app.task(name="scheduler.tasks.task_send_weekly_digest")
 def task_send_weekly_digest() -> dict:
-    logger.info("task_send_weekly_digest — stub (implement in Phase 4)")
-    return {"status": "stub"}
+    """Generate and deliver the weekly digest briefing."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from daily_briefing import generate_and_send_briefing
+
+        async with AsyncSessionLocal() as session:
+            result = await generate_and_send_briefing(
+                session, dry_run=False, is_weekly=True
+            )
+            return {
+                "date": result.get("date"),
+                "delivered": result.get("delivery_results", {}),
+                "chars": len(result.get("content_md", "")),
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_send_weekly_digest failed: %s", exc)
+        raise

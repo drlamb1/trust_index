@@ -99,6 +99,7 @@ class AlertType(str, enum.Enum):
     INSIDER_BUY_CLUSTER = "INSIDER_BUY_CLUSTER"
     SENTIMENT_DIVERGENCE = "SENTIMENT_DIVERGENCE"
     EARNINGS_SURPRISE = "EARNINGS_SURPRISE"
+    EARNINGS_TONE_SHIFT = "EARNINGS_TONE_SHIFT"
     TECHNICAL_SIGNAL = "TECHNICAL_SIGNAL"
     THESIS_MATCH = "THESIS_MATCH"
 
@@ -595,3 +596,215 @@ class DailyBriefing(Base):
     market_snapshot: Mapped[dict | None] = mapped_column(JsonType)  # SPY, VIX, etc.
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivery_channels: Mapped[list | None] = mapped_column(JsonType)  # ["email", "slack"]
+
+
+# ---------------------------------------------------------------------------
+# 16. ChatConversation — multi-persona chat sessions
+# ---------------------------------------------------------------------------
+
+
+class ChatConversation(Base):
+    __tablename__ = "chat_conversations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # UUID
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL")
+    )
+    title: Mapped[str | None] = mapped_column(String(255))
+    active_persona: Mapped[str] = mapped_column(String(30), default="analyst")
+    message_count: Mapped[int] = mapped_column(Integer, default=0)
+    total_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    total_output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+
+    messages: Mapped[list[ChatMessage]] = relationship(
+        back_populates="conversation",
+        passive_deletes=True,
+        order_by="ChatMessage.sequence",
+    )
+
+
+# ---------------------------------------------------------------------------
+# 17. ChatMessage — individual messages in a conversation
+# ---------------------------------------------------------------------------
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str] = mapped_column(
+        String(36), ForeignKey("chat_conversations.id", ondelete="CASCADE"), nullable=False
+    )
+    sequence: Mapped[int] = mapped_column(Integer, nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user/assistant/tool_call/tool_result
+    persona: Mapped[str | None] = mapped_column(String(30))
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    tool_name: Mapped[str | None] = mapped_column(String(100))
+    tool_input: Mapped[dict | None] = mapped_column(JsonType)
+    tool_result_data: Mapped[dict | None] = mapped_column(JsonType)
+    model_used: Mapped[str | None] = mapped_column(String(50))
+    input_tokens: Mapped[int | None] = mapped_column(Integer)
+    output_tokens: Mapped[int | None] = mapped_column(Integer)
+    cache_read_tokens: Mapped[int | None] = mapped_column(Integer)
+
+    conversation: Mapped[ChatConversation] = relationship(back_populates="messages")
+
+    __table_args__ = (
+        Index("ix_chat_messages_conv_seq", "conversation_id", "sequence"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 18. FeatureRequest — captured by the PM persona
+# ---------------------------------------------------------------------------
+
+
+class FeatureRequest(Base):
+    __tablename__ = "feature_requests"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    conversation_id: Mapped[str | None] = mapped_column(
+        String(36), ForeignKey("chat_conversations.id", ondelete="SET NULL")
+    )
+    title: Mapped[str] = mapped_column(String(500), nullable=False)
+    user_story: Mapped[str | None] = mapped_column(Text)
+    acceptance_criteria: Mapped[list | None] = mapped_column(JsonType)
+    priority: Mapped[str] = mapped_column(String(20), default="medium")
+    status: Mapped[str] = mapped_column(String(20), default="captured")
+    tags: Mapped[list | None] = mapped_column(JsonType)
+
+
+# ---------------------------------------------------------------------------
+# 19. MacroIndicator — FRED economic data series
+# ---------------------------------------------------------------------------
+
+
+class MacroIndicator(Base):
+    __tablename__ = "macro_indicators"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    series_id: Mapped[str] = mapped_column(String(20), nullable=False)  # e.g. "FEDFUNDS"
+    date: Mapped[date] = mapped_column(Date, nullable=False)
+    value: Mapped[float] = mapped_column(Float, nullable=False)
+    series_name: Mapped[str | None] = mapped_column(String(100))  # human-readable
+
+    __table_args__ = (
+        UniqueConstraint("series_id", "date", name="uq_macro_series_date"),
+        Index("ix_macro_series_date", "series_id", "date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 20. EarningsEvent — persisted earnings calendar from Finnhub
+# ---------------------------------------------------------------------------
+
+
+class EarningsEventDB(Base):
+    __tablename__ = "earnings_events"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+    event_date: Mapped[date] = mapped_column(Date, nullable=False)
+    hour: Mapped[str | None] = mapped_column(String(10))  # bmo/amc/dmh/""
+
+    eps_estimate: Mapped[float | None] = mapped_column(Float)
+    eps_actual: Mapped[float | None] = mapped_column(Float)
+    revenue_estimate: Mapped[float | None] = mapped_column(Float)  # millions USD
+    revenue_actual: Mapped[float | None] = mapped_column(Float)  # millions USD
+    eps_surprise_pct: Mapped[float | None] = mapped_column(Float)
+    rev_surprise_pct: Mapped[float | None] = mapped_column(Float)
+    source: Mapped[str] = mapped_column(String(50), default="finnhub")
+
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("ticker_id", "event_date", name="uq_earnings_ticker_date"),
+        Index("ix_earnings_ticker_date", "ticker_id", "event_date"),
+        Index("ix_earnings_event_date", "event_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 21. EarningsTranscript — earnings call transcripts from FMP
+# ---------------------------------------------------------------------------
+
+
+class EarningsTranscript(Base):
+    __tablename__ = "earnings_transcripts"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+    event_date: Mapped[date | None] = mapped_column(Date)
+    quarter: Mapped[int] = mapped_column(Integer, nullable=False)  # 1-4
+    fiscal_year: Mapped[int] = mapped_column(Integer, nullable=False)
+    transcript_text: Mapped[str | None] = mapped_column(Text)
+    word_count: Mapped[int | None] = mapped_column(Integer)
+    source: Mapped[str] = mapped_column(String(50), default="fmp")
+    content_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256
+
+    ticker: Mapped[Ticker] = relationship()
+    analysis: Mapped[EarningsAnalysis | None] = relationship(
+        back_populates="transcript", uselist=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint("ticker_id", "fiscal_year", "quarter", name="uq_transcript_ticker_fy_q"),
+        Index("ix_transcript_ticker_date", "ticker_id", "event_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 22. EarningsAnalysis — Claude Sonnet analysis of earnings transcripts
+# ---------------------------------------------------------------------------
+
+
+class EarningsAnalysis(Base):
+    __tablename__ = "earnings_analyses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    transcript_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("earnings_transcripts.id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+
+    overall_sentiment: Mapped[float | None] = mapped_column(Float)  # -1.0 to +1.0
+    management_tone: Mapped[str | None] = mapped_column(String(20))  # confident/cautious/etc.
+    forward_guidance_sentiment: Mapped[float | None] = mapped_column(Float)  # -1.0 to +1.0
+    key_topics: Mapped[list | None] = mapped_column(JsonType)
+    analyst_concerns: Mapped[list | None] = mapped_column(JsonType)
+    management_quotes: Mapped[list | None] = mapped_column(JsonType)  # [{speaker, quote, sentiment}]
+    summary: Mapped[str | None] = mapped_column(Text)
+    bull_signals: Mapped[list | None] = mapped_column(JsonType)
+    bear_signals: Mapped[list | None] = mapped_column(JsonType)
+    tone_vs_prior: Mapped[str | None] = mapped_column(String(20))  # improving/stable/deteriorating
+    analyzed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    model_used: Mapped[str | None] = mapped_column(String(50))
+
+    transcript: Mapped[EarningsTranscript] = relationship(back_populates="analysis")
+
+
+# ---------------------------------------------------------------------------
+# 23. User — authentication and authorization
+# ---------------------------------------------------------------------------
+
+
+class User(Base):
+    __tablename__ = "users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    username: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
+    role: Mapped[str] = mapped_column(String(20), nullable=False, default="viewer")  # admin/member/viewer
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    # Token budget for viewers (protects Claude API key from abuse)
+    daily_token_budget: Mapped[int] = mapped_column(Integer, default=50000)
+    tokens_used_today: Mapped[int] = mapped_column(Integer, default=0)
+    last_token_reset: Mapped[date | None] = mapped_column(Date)

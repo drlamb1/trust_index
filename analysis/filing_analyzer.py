@@ -287,10 +287,21 @@ async def analyze_with_claude(
                 }
             ],
         )
-        raw = response.content[0].text
+        raw = response.content[0].text.strip()
+
+        # Strip markdown code fences if model ignored the instruction
+        if raw.startswith("```"):
+            raw = re.sub(r"^```(?:json)?\s*", "", raw)
+            raw = re.sub(r"\s*```$", "", raw.rstrip())
+            raw = raw.strip()
+
+        if not raw:
+            logger.warning("Claude returned empty response (stop_reason=%s)", response.stop_reason)
+            return {}
+
         return json.loads(raw)
     except json.JSONDecodeError as exc:
-        logger.warning("Claude returned non-JSON response: %s", exc)
+        logger.warning("Claude returned non-JSON response: %s\nraw=%r", exc, locals().get("raw", ""))
         return {}
     except Exception as exc:
         logger.error("Claude analysis failed: %s", exc)
@@ -412,7 +423,9 @@ async def analyze_filing(
 
     session.add(analysis)
 
-    filing.is_analyzed = True
+    # Only mark as fully analyzed if Claude succeeded (or no API key = Stage 1 only)
+    claude_succeeded = not anthropic_api_key or bool(summary or financial_metrics)
+    filing.is_analyzed = claude_succeeded
     session.add(filing)
 
     await session.flush()

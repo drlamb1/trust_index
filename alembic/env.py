@@ -45,11 +45,13 @@ target_metadata = Base.metadata
 
 
 # Use the DATABASE_URL from settings (not alembic.ini)
-# Convert asyncpg URL to psycopg2 for synchronous Alembic migrations
-def get_sync_url() -> str:
+def get_async_url() -> str:
+    """Return the asyncpg URL with sslmode query param stripped (asyncpg uses ssl connect arg)."""
+    import re
+
     url = settings.database_url
-    # asyncpg → psycopg2 (sync driver for Alembic)
-    return url.replace("postgresql+asyncpg://", "postgresql://")
+    url = re.sub(r"[?&]sslmode=[^&]*", "", url)
+    return url
 
 
 # ---------------------------------------------------------------------------
@@ -59,7 +61,7 @@ def get_sync_url() -> str:
 
 def run_migrations_offline() -> None:
     """Run migrations without a live DB connection (generates SQL script)."""
-    url = get_sync_url()
+    url = get_async_url()
     context.configure(
         url=url,
         target_metadata=target_metadata,
@@ -90,13 +92,20 @@ def do_run_migrations(connection: Connection) -> None:
 
 async def run_async_migrations() -> None:
     """Run migrations using async engine (required for asyncpg)."""
+    import ssl as ssl_mod
+
     alembic_config = config.get_section(config.config_ini_section) or {}
-    alembic_config["sqlalchemy.url"] = get_sync_url()
+    alembic_config["sqlalchemy.url"] = get_async_url()
+
+    connect_args: dict = {}
+    if "sslmode=require" in settings.database_url:
+        connect_args["ssl"] = ssl_mod.create_default_context()
 
     connectable = async_engine_from_config(
         alembic_config,
         prefix="sqlalchemy.",
         poolclass=pool.NullPool,
+        connect_args=connect_args,
     )
     async with connectable.connect() as connection:
         await connection.run_sync(do_run_migrations)

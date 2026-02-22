@@ -24,8 +24,38 @@ import pandas as pd
 
 logger = logging.getLogger(__name__)
 
-# Approximate annualized risk-free rate; override in settings if FRED integration added
+# Fallback risk-free rate when FRED data unavailable
 DEFAULT_RISK_FREE_RATE = 0.05  # 5% annual
+
+
+async def get_risk_free_rate() -> float:
+    """
+    Fetch the latest 10-Year Treasury yield (DGS10) from the macro_indicators
+    table. Returns the yield as a decimal (e.g. 0.043 for 4.3%).
+
+    Falls back to DEFAULT_RISK_FREE_RATE if no FRED data available.
+    """
+    try:
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import MacroIndicator
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(MacroIndicator.value)
+                .where(MacroIndicator.series_id == "DGS10")
+                .order_by(MacroIndicator.date.desc())
+                .limit(1)
+            )
+            value = result.scalar_one_or_none()
+            if value is not None:
+                # FRED DGS10 is in percent (e.g. 4.3), convert to decimal
+                return float(value) / 100.0
+    except Exception as exc:
+        logger.debug("Could not fetch DGS10 from DB, using default: %s", exc)
+
+    return DEFAULT_RISK_FREE_RATE
 
 
 # ---------------------------------------------------------------------------
