@@ -73,8 +73,13 @@ def init(
     try:
         import subprocess
 
+        import sys
+
         result = subprocess.run(
-            ["alembic", "upgrade", "head"], capture_output=True, text=True, check=True
+            [sys.executable, "-m", "alembic", "upgrade", "head"],
+            capture_output=True,
+            text=True,
+            check=True,
         )
         console.print(f"    ✓ Migrations complete: {result.stdout.strip() or 'up to date'}")
     except subprocess.CalledProcessError as e:
@@ -372,6 +377,7 @@ def ingest_prices(
 
                 with console.status(f"Fetching {days} days of prices for {symbol.upper()}..."):
                     count = await fetch_and_store_prices(session, ticker, days=days)
+                await session.commit()
                 console.print(f"[green]✓ {symbol.upper()}: {count} bars stored[/green]")
             else:
                 result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
@@ -383,6 +389,7 @@ def ingest_prices(
                         session, list(tickers), days=days, concurrency=concurrency
                     )
 
+                await session.commit()
                 total = sum(results.values())
                 errors = sum(1 for v in results.values() if v == 0)
                 console.print(
@@ -501,6 +508,109 @@ def ingest_insider_trades(
 
             await session.commit()
             console.print(f"[bold green]✓ Stored {total} total insider trades.[/bold green]")
+
+    run(_ingest())
+
+
+@ingest_app.command("macro")
+def ingest_macro(
+    days: int = typer.Option(365, "--days", "-d", help="Lookback days for FRED data"),
+):
+    """Fetch FRED macroeconomic indicators (rates, yields, CPI, unemployment)."""
+
+    async def _ingest():
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from ingestion.macro_data import fetch_and_store_macro
+
+        if not settings.has_fred:
+            console.print("[red]No FRED API key configured (FRED_API_KEY env var).[/red]")
+            return
+
+        with console.status("Fetching FRED macro data..."):
+            async with AsyncSessionLocal() as session:
+                results = await fetch_and_store_macro(session, settings.fred_api_key, days=days)
+                await session.commit()
+
+        table = Table(title="FRED Macro Data Ingestion")
+        table.add_column("Series", style="cyan")
+        table.add_column("Observations", justify="right")
+
+        for series_id, count in results.items():
+            table.add_row(series_id, str(count))
+
+        total = sum(results.values())
+        table.add_row("[bold]Total[/bold]", f"[bold]{total}[/bold]")
+        console.print(table)
+
+    run(_ingest())
+
+
+@ingest_app.command("transcripts")
+def ingest_transcripts(
+    ticker: str | None = typer.Argument(None, help="Single ticker (default: watchlist)"),
+    quarters: int = typer.Option(4, "--quarters", "-q", help="Number of quarters to look back"),
+    analyze: bool = typer.Option(True, "--analyze/--no-analyze", help="Run Claude analysis after fetch"),
+):
+    """Fetch earnings call transcripts (Motley Fool + FMP fallback) and optionally analyze."""
+
+    async def _ingest():
+        from sqlalchemy import select
+
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.earnings_transcripts import fetch_and_store_transcripts_batch
+
+        fmp_key = settings.fmp_api_key if settings.has_fmp else ""
+        source_label = "Motley Fool" + (" + FMP" if fmp_key else "")
+
+        async with AsyncSessionLocal() as session:
+            if ticker:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.symbol == ticker.upper())
+                )
+                t = result.scalar_one_or_none()
+                if not t:
+                    console.print(f"[red]Ticker {ticker.upper()} not found.[/red]")
+                    return
+                tickers_to_process = [t]
+            else:
+                result = await session.execute(
+                    select(Ticker).where(Ticker.is_active.is_(True), Ticker.in_watchlist.is_(True))
+                )
+                tickers_to_process = list(result.scalars().all())
+
+            console.print(
+                f"Fetching transcripts for {len(tickers_to_process)} ticker(s), "
+                f"last {quarters} quarters via {source_label}..."
+            )
+            with console.status("Discovering and downloading transcripts..."):
+                results = await fetch_and_store_transcripts_batch(
+                    session, tickers_to_process, fmp_api_key=fmp_key, quarters_back=quarters
+                )
+            await session.commit()
+
+            total = sum(results.values())
+            for sym, count in results.items():
+                if count:
+                    console.print(f"  [green]✓ {sym}: {count} new transcript(s)[/green]")
+            if total:
+                console.print(f"[bold green]✓ {total} total transcripts stored.[/bold green]")
+            else:
+                console.print("[yellow]No new transcripts found.[/yellow]")
+
+            if analyze and total and settings.has_anthropic:
+                from analysis.earnings_analyzer import analyze_unprocessed
+
+                with console.status("Analyzing transcripts with Claude Sonnet..."):
+                    analyzed = await analyze_unprocessed(session, settings.anthropic_api_key)
+                await session.commit()
+                console.print(f"  [cyan]↳ {analyzed} transcript(s) analyzed[/cyan]")
+            elif analyze and total and not settings.has_anthropic:
+                console.print(
+                    "[yellow]Skipping analysis — no Anthropic API key configured.[/yellow]"
+                )
 
     run(_ingest())
 
@@ -655,9 +765,33 @@ def serve(
 def briefing(
     dry_run: bool = typer.Option(True, "--dry-run/--send", help="Print without delivering"),
     date_str: str | None = typer.Option(None, "--date", help="Date (YYYY-MM-DD, default: today)"),
+    weekly: bool = typer.Option(False, "--weekly", help="Generate weekly digest instead"),
 ):
-    """Generate and optionally deliver the daily briefing. (Phase 4)"""
-    console.print("[yellow]Daily briefing generation will be available in Phase 4.[/yellow]")
+    """Generate and optionally deliver the daily briefing."""
+    from datetime import date as date_type
+
+    from core.database import AsyncSessionLocal
+    from daily_briefing import generate_and_send_briefing
+
+    for_date = date_type.fromisoformat(date_str) if date_str else None
+
+    async def _run():
+        async with AsyncSessionLocal() as session:
+            result = await generate_and_send_briefing(
+                session,
+                for_date=for_date,
+                dry_run=dry_run,
+                is_weekly=weekly,
+            )
+        console.print(result["content_md"])
+        if result["delivered"]:
+            delivered_to = [ch for ch, ok in result["delivered"].items() if ok]
+            if delivered_to:
+                console.print(f"\n[green]✓ Delivered via: {', '.join(delivered_to)}[/green]")
+            else:
+                console.print("\n[yellow]No delivery channels succeeded — check config.[/yellow]")
+
+    run(_run())
 
 
 # ---------------------------------------------------------------------------
@@ -718,6 +852,61 @@ def status():
         console.print(table)
 
     run(_status())
+
+
+# ---------------------------------------------------------------------------
+# create-admin — Bootstrap admin user
+# ---------------------------------------------------------------------------
+
+
+@app.command("create-admin")
+def create_admin(
+    email: str = typer.Option(..., "--email", "-e", help="Admin email address"),
+    password: str = typer.Option(..., "--password", "-p", help="Admin password"),
+    username: str = typer.Option(None, "--username", "-u", help="Username (default: email prefix)"),
+):
+    """Create an admin user for the platform."""
+
+    async def _create():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import User
+        from core.security import hash_password
+
+        final_username = username or email.split("@")[0]
+
+        async with AsyncSessionLocal() as session:
+            # Check if already exists
+            existing = await session.execute(
+                select(User).where((User.email == email) | (User.username == final_username))
+            )
+            user = existing.scalar_one_or_none()
+
+            if user:
+                # Promote existing user to admin
+                user.role = "admin"
+                user.hashed_password = hash_password(password)
+                user.is_active = True
+                session.add(user)
+                await session.commit()
+                console.print(
+                    f"[yellow]User {email} already exists — promoted to admin.[/yellow]"
+                )
+            else:
+                user = User(
+                    email=email,
+                    username=final_username,
+                    hashed_password=hash_password(password),
+                    role="admin",
+                    is_active=True,
+                    daily_token_budget=0,  # unlimited for admin
+                )
+                session.add(user)
+                await session.commit()
+                console.print(f"[green]✓ Admin user created: {email} ({final_username})[/green]")
+
+    run(_create())
 
 
 # ---------------------------------------------------------------------------

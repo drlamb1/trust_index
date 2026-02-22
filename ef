@@ -1,0 +1,129 @@
+#!/usr/bin/env bash
+# EdgeFinder developer CLI
+# Usage: ./ef <command> [args...]
+#
+#   Docker          ./ef up | down | logs
+#   Project         ./ef status | init | migrate | worker | serve | run
+#   Data            ./ef ingest prices [TICKER] [--days N]
+#                   ./ef ingest filings [TICKER]
+#                   ./ef ingest news [TICKER]
+#                   ./ef ticker list | add TICKER | remove TICKER
+#   Celery worker   ./ef worker
+
+set -euo pipefail
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PYTHON="$SCRIPT_DIR/.venv/bin/python"
+COMPOSE="docker compose"
+
+# ── Helpers ────────────────────────────────────────────────────────────────────
+
+ensure_redis() {
+    # Check by container name — avoids parsing `docker compose ps` text format
+    # which uses "Up X minutes", not "running".
+    if ! docker ps --filter "name=edgefinder-redis" --filter "status=running" -q 2>/dev/null | grep -q .; then
+        echo "  → Starting Redis..."
+        $COMPOSE -f "$SCRIPT_DIR/docker-compose.yml" up -d redis
+        sleep 1
+    fi
+}
+
+# ── Commands ───────────────────────────────────────────────────────────────────
+
+case "${1:-help}" in
+
+    # Docker
+    up)
+        echo "Starting Redis..."
+        $COMPOSE -f "$SCRIPT_DIR/docker-compose.yml" up -d redis
+        echo "  ✓ Redis up"
+        ;;
+
+    down)
+        $COMPOSE -f "$SCRIPT_DIR/docker-compose.yml" down
+        ;;
+
+    logs)
+        $COMPOSE -f "$SCRIPT_DIR/docker-compose.yml" logs -f redis
+        ;;
+
+    # DB
+    migrate)
+        "$PYTHON" -m alembic -c "$SCRIPT_DIR/alembic.ini" upgrade head
+        ;;
+
+    # Project
+    status)
+        "$PYTHON" "$SCRIPT_DIR/cli.py" status
+        ;;
+
+    init)
+        ensure_redis
+        "$PYTHON" "$SCRIPT_DIR/cli.py" init "${@:2}"
+        ;;
+
+    worker)
+        ensure_redis
+        "$PYTHON" -m celery -A scheduler.tasks worker --loglevel=info
+        ;;
+
+    serve)
+        ensure_redis
+        "$PYTHON" "$SCRIPT_DIR/cli.py" serve "${@:2}"
+        ;;
+
+    run)
+        ensure_redis
+        "$PYTHON" "$SCRIPT_DIR/cli.py" run "${@:2}"
+        ;;
+
+    # Data passthrough → cli.py subcommands
+    ingest)
+        ensure_redis
+        "$PYTHON" "$SCRIPT_DIR/cli.py" ingest "${@:2}"
+        ;;
+
+    ticker)
+        "$PYTHON" "$SCRIPT_DIR/cli.py" ticker "${@:2}"
+        ;;
+
+    briefing)
+        "$PYTHON" "$SCRIPT_DIR/cli.py" briefing "${@:2}"
+        ;;
+
+    # Help
+    help | -h | --help)
+        cat <<'EOF'
+EdgeFinder dev CLI — ./ef <command> [args]
+
+Docker:
+  up                    Start Redis container
+  down                  Stop containers
+  logs                  Tail Redis logs
+
+Project:
+  status                System health (DB + Redis + ticker count)
+  init [--skip-sp500]   Migrate DB + seed tickers and theses
+  migrate               Run Alembic migrations only
+  worker                Start Celery worker (auto-starts Redis)
+  serve [--port N]      Launch web dashboard (Phase 5)
+  run [--dry-run]       Trigger full daily EOD pipeline
+
+Data:
+  ingest prices [TICKER] [--days N]   Backfill OHLCV (default: all, 365d)
+  ingest filings [TICKER] [--type T]  Fetch SEC filings  (default: 10-K)
+  ingest insider-trades [TICKER]      Fetch Form 4 insider trades
+  ingest news [TICKER] [--days N]     Aggregate news articles
+
+Tickers:
+  ticker list [--watchlist] [--sp500]
+  ticker add  TICKER [--thesis SLUG] [--notes "..."]
+  ticker remove TICKER [--hard]
+EOF
+        ;;
+
+    *)
+        echo "Unknown command: $1  (run './ef help' for usage)"
+        exit 1
+        ;;
+esac
