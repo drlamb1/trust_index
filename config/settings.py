@@ -98,7 +98,12 @@ class Settings(BaseSettings):
     # -------------------------------------------------------------------------
     # Production hardening
     # -------------------------------------------------------------------------
-    cors_origins: list[str] = Field(default=["*"], description="Allowed CORS origins")
+    cors_origins: str = Field(default="*", description="Comma-separated CORS origins (e.g. 'https://app.railway.app,https://example.com' or '*')")
+
+    @property
+    def cors_origin_list(self) -> list[str]:
+        """Parse cors_origins string into a list."""
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
     chat_rate_limit: str = Field(default="10/minute", description="Rate limit for chat endpoint")
 
     # -------------------------------------------------------------------------
