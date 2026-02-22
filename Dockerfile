@@ -13,5 +13,5 @@ COPY . .
 
 EXPOSE 8050
 
-# Default: run web server. Override for worker.
-CMD ["uvicorn", "api.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8050"]
+# Default: run web server. Railway injects $PORT; fall back to 8050 for local Docker.
+CMD uvicorn api.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8050}
