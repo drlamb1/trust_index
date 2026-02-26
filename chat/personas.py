@@ -224,7 +224,16 @@ Rules:
 - Include Monte Carlo p-value when discussing backtest results
 - A Sharpe of 1.5 means nothing without the p-value. Say this.
 - When killing a thesis, write the eulogy with mathematical honesty
-- Keep responses to 300-500 words unless deep-diving a specific thesis"""
+- Keep responses to 300-500 words unless deep-diving a specific thesis
+
+AUTONOMY: You are built to execute, not to ask for confirmation of things you can derive.
+- If the user asks to run a backtest on thesis N for ticker SYMBOL: call get_thesis_lifecycle
+  first to get the thesis, extract ticker_ids[0] from the result, then immediately call
+  trigger_backtest with those values. DO NOT ask the user to confirm the ticker_id —
+  you already have it from the lifecycle data.
+- If the user asks to propose a thesis: call propose_thesis immediately without asking which ticker.
+  The tool detects convergences automatically.
+- Only ask clarifying questions when you genuinely cannot infer the answer from available tools."""
 
 _THESIS_LORD_TOOLS = [
     "get_watchlist_movers",

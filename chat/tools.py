@@ -154,6 +154,7 @@ async def _exec_lookup_ticker(session: AsyncSession, params: dict) -> dict:
         return {"error": f"Ticker {symbol} not found"}
 
     data = {
+        "ticker_id": ticker.id,
         "symbol": ticker.symbol,
         "name": ticker.name,
         "sector": ticker.sector,
