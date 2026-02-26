@@ -1,5 +1,6 @@
 // EdgeFinder typed API client
-// All requests include credentials (cookie-based JWT)
+// Uses Bearer token auth (localStorage) for cross-origin Vercel → Railway requests.
+// Cookies don't work cross-origin without SameSite=None + HTTPS on the same domain.
 
 import type {
   AgentMemory,
@@ -18,11 +19,35 @@ import type {
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
+// ─── Token storage ───
+
+const TOKEN_KEY = 'ef_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+// ─── Core fetch ───
+
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getToken()
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+    ...(init?.headers as Record<string, string>),
+  }
+  if (token) headers['Authorization'] = `Bearer ${token}`
+
   const res = await fetch(`${BASE}${path}`, {
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json', ...init?.headers },
     ...init,
+    headers,
   })
   if (!res.ok) {
     const body = await res.text().catch(() => '')
@@ -34,13 +59,26 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
 // ─── Auth ───
 
 export const auth = {
-  login: (email: string, password: string) =>
-    req<{ access_token: string; user: User }>('/api/auth/login', {
+  login: async (email: string, password: string): Promise<{ access_token: string; user: User }> => {
+    // Login doesn't need a token yet — post without auth header
+    const res = await fetch(`${BASE}/api/auth/login`, {
       method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-    }),
+    })
+    if (!res.ok) {
+      const body = await res.text().catch(() => '')
+      throw new Error(`${res.status} ${res.statusText}: ${body}`)
+    }
+    const data = await res.json()
+    if (data.access_token) setToken(data.access_token)
+    return data
+  },
   me: () => req<User>('/api/auth/me'),
-  logout: () => req('/api/auth/logout', { method: 'POST' }),
+  logout: () => {
+    clearToken()
+    return Promise.resolve()
+  },
   changePassword: (current_password: string, new_password: string) =>
     req('/api/auth/change-password', {
       method: 'POST',
@@ -79,19 +117,17 @@ export const simulation = {
 export const chat = {
   conversations: () => req<Conversation[]>('/api/chat/conversations'),
   messages: (id: string) => req<ChatMessage[]>(`/api/chat/conversations/${id}/messages`),
-  // Chat itself uses fetch streaming — see lib/sse.ts
-}
-
-// ─── Data / Market ───
-
-export const market = {
-  recentAlerts: (hours = 24) =>
-    req<{ alerts: Alert[]; count: number }>(`/api/chat/…`).catch(() => ({ alerts: [], count: 0 })),
 }
 
 // ─── Briefing ───
 
 export const briefing = {
-  markdown: () =>
-    fetch(`${BASE}/briefing.md`, { credentials: 'include' }).then(r => r.text()),
+  markdown: async (): Promise<string> => {
+    const token = getToken()
+    const headers: Record<string, string> = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${BASE}/briefing.md`, { headers })
+    if (!res.ok) throw new Error(`${res.status}`)
+    return res.text()
+  },
 }

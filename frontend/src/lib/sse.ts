@@ -2,19 +2,24 @@
 //
 // Two SSE patterns:
 //   1. Standard EventSource (GET) — simulation stream /simulation/stream
+//      Note: EventSource doesn't support custom headers, so the simulation stream
+//      is unauthenticated (it only returns public event log data — no sensitive info).
 //   2. POST → text/event-stream  — chat endpoint /api/chat
+//      Uses Bearer token in Authorization header.
 
 import type { ChatSSEEvent, PersonaName } from '@/types/api'
+import { getToken } from '@/lib/api'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
 // ─── Standard EventSource (simulation feed) ───
+// /simulation/stream is public (no auth required) — it only shows agent activity log
 
 export function createSimulationStream(
   onEvent: (event: Record<string, unknown>) => void,
   onError?: () => void,
 ): () => void {
-  const es = new EventSource(`${BASE}/simulation/stream`, { withCredentials: true })
+  const es = new EventSource(`${BASE}/simulation/stream`)
 
   es.onmessage = (e) => {
     try {
@@ -38,10 +43,13 @@ export async function* streamChat(
   conversationId: string | null,
   persona: PersonaName | null,
 ): AsyncGenerator<ChatSSEEvent> {
+  const token = getToken()
   const res = await fetch(`${BASE}/api/chat`, {
     method: 'POST',
-    credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      ...(token ? { 'Authorization': `Bearer ${token}` } : {}),
+    },
     body: JSON.stringify({
       message,
       conversation_id: conversationId,
