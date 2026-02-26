@@ -1,0 +1,24 @@
+# Python backend — not deployed to Vercel
+requirements.txt
+*.py
+alembic/
+config/
+core/
+ingestion/
+analysis/
+alerts/
+scheduler/
+simulation/
+chat/
+api/
+tests/
+.venv/
+__pycache__/
+*.pyc
+Dockerfile
+docker-compose.yml
+Procfile
+entrypoint.sh
+cli.py
+daily_briefing.py
+ARCHITECTURE.md
