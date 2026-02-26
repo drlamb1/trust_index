@@ -247,7 +247,8 @@ async def chat_turn(
         conv = await _get_or_create_conversation(session, conversation_id)
 
         # 2. Route to persona
-        if persona_override and persona_override in ("analyst", "thesis", "pm"):
+        _ALL_PERSONAS = {"analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
+        if persona_override and persona_override in _ALL_PERSONAS:
             persona_name = persona_override
             cleaned_text = user_text
         else:
