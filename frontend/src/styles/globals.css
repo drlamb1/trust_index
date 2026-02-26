@@ -1,0 +1,185 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+/* ─────────────────────────────────────────────────────────
+   EdgeFinder Design System — Austere Intelligence
+   "A private instrument for someone who thinks in distributions"
+───────────────────────────────────────────────────────── */
+
+@theme {
+  /* The Void */
+  --color-background: hsl(228 25% 6%);
+  --color-surface:    hsl(228 20% 9%);
+  --color-card:       hsl(228 18% 11%);
+  --color-border:     hsl(228 15% 16%);
+
+  /* Signal System */
+  --color-amber:        hsl(38 92% 55%);   /* YOUR edge — actions, theses, conviction */
+  --color-amber-dim:    hsl(38 60% 35%);
+  --color-amber-muted:  hsl(38 30% 20%);
+  --color-cyan:         hsl(185 72% 48%);  /* MARKET — data, signals, external */
+  --color-cyan-dim:     hsl(185 45% 30%);
+  --color-cyan-muted:   hsl(185 25% 18%);
+
+  /* Status */
+  --color-success: hsl(142 71% 45%);
+  --color-warning: hsl(38 92% 55%);
+  --color-danger:  hsl(0 72% 55%);
+
+  /* Text */
+  --color-text-primary: hsl(220 15% 92%);
+  --color-text-muted:   hsl(220 10% 45%);
+  --color-text-dim:     hsl(220 8% 30%);
+
+  /* Typography */
+  --font-sans: "Space Grotesk", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", "Cascadia Code", monospace;
+}
+
+/* ─── Base ─── */
+
+*, *::before, *::after { box-sizing: border-box; }
+
+html { font-size: 14px; }
+
+body {
+  margin: 0;
+  background-color: var(--color-background);
+  color: var(--color-text-primary);
+  font-family: var(--font-sans);
+  font-size: 0.875rem;
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+
+  /* Nebula texture — the void as canvas */
+  background-image:
+    radial-gradient(ellipse at 20% 50%, hsl(228 40% 12% / 0.4) 0%, transparent 60%),
+    radial-gradient(ellipse at 80% 20%, hsl(185 50% 8% / 0.3) 0%, transparent 50%),
+    radial-gradient(ellipse at 60% 80%, hsl(38 40% 8% / 0.2) 0%, transparent 40%);
+  min-height: 100vh;
+}
+
+/* Numbers are always monospace */
+.mono, [data-mono],
+.metric-value, .price, .pct, .score {
+  font-family: var(--font-mono);
+}
+
+/* ─── Glass Cards ─── */
+.glass {
+  background: hsl(228 18% 11% / 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--color-border);
+  border-radius: 12px;
+}
+
+.glass-sm {
+  background: hsl(228 18% 11% / 0.6);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+}
+
+/* ─── Amber / Cyan utilities ─── */
+.text-amber { color: var(--color-amber); }
+.text-cyan  { color: var(--color-cyan); }
+.text-muted { color: var(--color-text-muted); }
+.text-dim   { color: var(--color-text-dim); }
+.text-up    { color: var(--color-success); }
+.text-down  { color: var(--color-danger); }
+
+.bg-amber-muted { background: var(--color-amber-muted); }
+.bg-cyan-muted  { background: var(--color-cyan-muted); }
+
+.border-amber { border-color: var(--color-amber); }
+.border-cyan  { border-color: var(--color-cyan); }
+
+/* ─── Pill / Badge ─── */
+.pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 100px;
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.pill-amber {
+  background: var(--color-amber-muted);
+  color: var(--color-amber);
+  border: 1px solid var(--color-amber-dim);
+}
+
+.pill-cyan {
+  background: var(--color-cyan-muted);
+  color: var(--color-cyan);
+  border: 1px solid var(--color-cyan-dim);
+}
+
+.pill-danger {
+  background: hsl(0 50% 15%);
+  color: var(--color-danger);
+  border: 1px solid hsl(0 50% 30%);
+}
+
+.pill-success {
+  background: hsl(142 40% 12%);
+  color: var(--color-success);
+  border: 1px solid hsl(142 40% 25%);
+}
+
+/* ─── Staggered entry animations — "systems coming online" ─── */
+@keyframes fadeSlideUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-entry {
+  animation: fadeSlideUp 0.3s ease-out both;
+}
+.animate-entry-1 { animation-delay: 0ms; }
+.animate-entry-2 { animation-delay: 60ms; }
+.animate-entry-3 { animation-delay: 120ms; }
+.animate-entry-4 { animation-delay: 180ms; }
+.animate-entry-5 { animation-delay: 240ms; }
+.animate-entry-6 { animation-delay: 300ms; }
+
+/* ─── Constellation node pulse ─── */
+@keyframes nodePulse {
+  0%, 100% { opacity: 0.7; transform: scale(1); }
+  50%       { opacity: 1.0; transform: scale(1.15); }
+}
+
+.node-pulse {
+  animation: nodePulse 3s ease-in-out infinite;
+}
+
+/* ─── Streaming cursor ─── */
+@keyframes cursorBlink {
+  0%, 50% { opacity: 1; }
+  51%, 100% { opacity: 0; }
+}
+.streaming-cursor::after {
+  content: '▋';
+  color: var(--color-amber);
+  animation: cursorBlink 1s step-end infinite;
+}
+
+/* ─── Scrollbar ─── */
+::-webkit-scrollbar { width: 4px; height: 4px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background: var(--color-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover { background: var(--color-text-dim); }
+
+/* ─── React Force Graph canvas ─── */
+.constellation-canvas canvas {
+  border-radius: 8px;
+}
+
+/* ─── Nivo heatmap overrides ─── */
+.vol-heatmap text { fill: var(--color-text-muted) !important; font-family: var(--font-mono) !important; }
