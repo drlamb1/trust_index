@@ -65,6 +65,12 @@ export default function SimulationEngine() {
   const pnl = stats?.portfolio?.pnl ?? 0
   const pnlPct = stats?.portfolio?.pnl_pct ?? 0
   const activeTheses = stats?.theses?.by_status?.paper_live ?? 0
+  const winRateStr = stats?.avg_win_rate != null
+    ? `${(stats.avg_win_rate * 100).toFixed(1)}%`
+    : '—'
+  const sharpeStr = stats?.avg_sharpe != null
+    ? stats.avg_sharpe.toFixed(2)
+    : '—'
 
   return (
     <div className="glass animate-entry animate-entry-2" style={{ padding: '20px 24px', height: '100%' }}>
@@ -94,12 +100,12 @@ export default function SimulationEngine() {
         <StatTile
           icon={Target}
           label="Win Rate"
-          value="—"
+          value={winRateStr}
         />
         <StatTile
           icon={TrendingUp}
           label="Sharpe"
-          value="—"
+          value={sharpeStr}
         />
         <StatTile
           icon={Activity}

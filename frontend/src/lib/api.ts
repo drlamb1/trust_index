@@ -8,11 +8,15 @@ import type {
   Conversation,
   ChatMessage,
   HestonParams,
+  MacroPulseCard,
   PortfolioSummary,
   SimulatedThesis,
   SimulationLog,
   SimulationStats,
   ThesisStatus,
+  TickerAlert,
+  TickerPriceBar,
+  TickerSummary,
   User,
   VolSurface,
 } from '@/types/api'
@@ -117,6 +121,23 @@ export const simulation = {
 export const chat = {
   conversations: () => req<Conversation[]>('/api/chat/conversations'),
   messages: (id: string) => req<ChatMessage[]>(`/api/chat/conversations/${id}/messages`),
+}
+
+// ─── Macro ───
+
+export const macro = {
+  pulse: () => req<MacroPulseCard[]>('/api/macro/pulse'),
+}
+
+// ─── Ticker ───
+
+export const ticker = {
+  summary: (symbol: string) => req<TickerSummary>(`/api/ticker/${symbol}`),
+  priceHistory: (symbol: string, days = 90) =>
+    req<TickerPriceBar[]>(`/api/ticker/${symbol}/price-history?days=${days}`),
+  alerts: (symbol: string) => req<TickerAlert[]>(`/api/ticker/${symbol}/alerts`),
+  theses: (symbol: string) => req<SimulatedThesis[]>(`/api/ticker/${symbol}/theses`),
+  backtests: (symbol: string) => req<import('@/types/api').BacktestRun[]>(`/api/ticker/${symbol}/backtests`),
 }
 
 // ─── Briefing ───

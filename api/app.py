@@ -1286,11 +1286,13 @@ def create_app() -> FastAPI:
     from api.admin_routes import router as admin_router
     from api.auth_routes import router as auth_router
     from api.chat_routes import router as chat_router
+    from api.ticker_routes import router as ticker_router
 
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(chat_router)
     app.include_router(simulation_router)
+    app.include_router(ticker_router)
 
     @app.on_event("startup")
     async def startup_warnings():

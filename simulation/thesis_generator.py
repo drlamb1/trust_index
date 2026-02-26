@@ -30,6 +30,7 @@ from core.models import (
     SimEventType,
     SimulatedThesis,
     SimulationLog,
+    TechnicalSnapshot,
     Ticker,
     ThesisStatus,
 )
@@ -44,19 +45,21 @@ logger = logging.getLogger(__name__)
 
 async def detect_signal_convergence(
     session: AsyncSession,
-    lookback_hours: int = 72,
+    lookback_hours: int = 168,
 ) -> list[dict]:
     """Scan for converging signals across data sources.
 
-    Looks for tickers that have multiple signal types firing simultaneously:
-      - Alert clusters (3+ alerts in lookback window)
-      - Filing anomalies + insider buying
+    Looks for tickers that have signal types firing:
+      - Alerts (any alert in lookback window)
+      - Filing anomalies (health score < 50)
+      - Insider buying
       - Sentiment divergence (bearish news + rising price, or vice versa)
-      - Macro regime shifts affecting sector
+      - RSI extremes (< 35 oversold, > 70 overbought)
 
     Returns list of convergence dicts with ticker info and signal details.
     """
     since = datetime.now(timezone.utc) - timedelta(hours=lookback_hours)
+    since_date = since.date()
     convergences = []
 
     # Get watchlist tickers
@@ -68,23 +71,27 @@ async def detect_signal_convergence(
     for ticker in tickers:
         signals = {}
 
-        # Check alert clusters
+        # Check recent alerts (any alert counts)
         alert_result = await session.execute(
-            select(func.count(Alert.id)).where(
+            select(func.count(Alert.id), func.array_agg(Alert.alert_type)).where(
                 Alert.ticker_id == ticker.id,
                 Alert.created_at >= since,
             )
         )
-        alert_count = alert_result.scalar_one()
-        if alert_count >= 2:
-            signals["alert_cluster"] = {"count": alert_count}
+        alert_row = alert_result.one()
+        alert_count = alert_row[0] or 0
+        if alert_count >= 1:
+            signals["alert"] = {
+                "count": alert_count,
+                "types": [t for t in (alert_row[1] or []) if t],
+            }
 
         # Check recent insider buying
         insider_result = await session.execute(
             select(func.count(InsiderTrade.id), func.sum(InsiderTrade.total_amount)).where(
                 InsiderTrade.ticker_id == ticker.id,
                 InsiderTrade.trade_type == "buy",
-                InsiderTrade.filed_date >= since.date(),
+                InsiderTrade.filed_date >= since_date,
             )
         )
         row = insider_result.one()
@@ -94,7 +101,7 @@ async def detect_signal_convergence(
                 "total_value": float(row[1] or 0),
             }
 
-        # Check filing red flags
+        # Check filing red flags (most recent filing analysis, no time filter)
         filing_result = await session.execute(
             select(FilingAnalysis.health_score, FilingAnalysis.red_flags)
             .join(FilingAnalysis.filing)
@@ -125,8 +132,23 @@ async def detect_signal_convergence(
                 "direction": "bearish" if avg_sentiment < 0 else "bullish",
             }
 
-        # Convergence = 2+ signal types firing
-        if len(signals) >= 2:
+        # Check RSI extremes from most recent technical snapshot
+        rsi_result = await session.execute(
+            select(TechnicalSnapshot.rsi_14, TechnicalSnapshot.date)
+            .where(TechnicalSnapshot.ticker_id == ticker.id)
+            .order_by(desc(TechnicalSnapshot.date))
+            .limit(1)
+        )
+        rsi_row = rsi_result.first()
+        if rsi_row and rsi_row.rsi_14 is not None:
+            rsi = float(rsi_row.rsi_14)
+            if rsi < 35:
+                signals["rsi_oversold"] = {"rsi": rsi, "date": str(rsi_row.date)}
+            elif rsi > 70:
+                signals["rsi_overbought"] = {"rsi": rsi, "date": str(rsi_row.date)}
+
+        # Any signal is worth investigating
+        if len(signals) >= 1:
             convergences.append({
                 "ticker_id": ticker.id,
                 "ticker_symbol": ticker.symbol,

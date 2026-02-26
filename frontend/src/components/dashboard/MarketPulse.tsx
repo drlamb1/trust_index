@@ -5,7 +5,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { TrendingUp, TrendingDown, Minus } from 'lucide-react'
-import { simulation } from '@/lib/api'
+import { macro } from '@/lib/api'
 
 interface MetricCard {
   label: string
@@ -66,17 +66,32 @@ function PulseCard({ label, value, change, direction, entryDelay }: MetricCard) 
   )
 }
 
-// Hardcoded market data for now — will connect to macro API
-const PLACEHOLDER_METRICS: Omit<MetricCard, 'entryDelay'>[] = [
-  { label: 'S&P 500', value: '—', change: '—', direction: 'flat' },
-  { label: 'VIX', value: '—', change: '—', direction: 'flat' },
-  { label: '10Y Yield', value: '—', change: '—', direction: 'flat' },
-  { label: 'Fed Funds', value: '—', change: '—', direction: 'flat' },
-  { label: 'DXY', value: '—', change: '—', direction: 'flat' },
-  { label: 'BTC', value: '—', change: '—', direction: 'flat' },
-]
-
 export default function MarketPulse() {
+  const { data: cards = [] } = useQuery({
+    queryKey: ['macro-pulse'],
+    queryFn: macro.pulse,
+    refetchInterval: 5 * 60_000, // refresh every 5 min
+    staleTime: 4 * 60_000,
+  })
+
+  // Show 6 skeleton cards while loading
+  const displayCards: MetricCard[] = cards.length > 0
+    ? cards.map((c, i) => ({
+        label: c.label,
+        value: c.value_str,
+        change: c.change_str ?? undefined,
+        direction: c.direction,
+        entryDelay: i * 60,
+      }))
+    : [
+        { label: 'Fed Funds',    value: '—', direction: 'flat', entryDelay: 0 },
+        { label: '10Y Yield',    value: '—', direction: 'flat', entryDelay: 60 },
+        { label: '2Y Yield',     value: '—', direction: 'flat', entryDelay: 120 },
+        { label: 'Yield Curve',  value: '—', direction: 'flat', entryDelay: 180 },
+        { label: 'Unemployment', value: '—', direction: 'flat', entryDelay: 240 },
+        { label: 'CPI',          value: '—', direction: 'flat', entryDelay: 300 },
+      ]
+
   return (
     <section>
       <h2 style={{
@@ -91,8 +106,8 @@ export default function MarketPulse() {
         Market Pulse
       </h2>
       <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
-        {PLACEHOLDER_METRICS.map((m, i) => (
-          <PulseCard key={m.label} {...m} entryDelay={i * 60} />
+        {displayCards.map((m) => (
+          <PulseCard key={m.label} {...m} />
         ))}
       </div>
     </section>

@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Search, Bell } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
 
 function Clock() {
   const [time, setTime] = useState(new Date())
@@ -36,6 +37,53 @@ function Clock() {
   )
 }
 
+function TickerSearch() {
+  const [value, setValue] = useState('')
+  const [focused, setFocused] = useState(false)
+  const navigate = useNavigate()
+
+  const handleSubmit = (e: React.FormEvent) => {
+    e.preventDefault()
+    const sym = value.trim().toUpperCase()
+    if (sym) {
+      navigate(`/tickers/${sym}`)
+      setValue('')
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <div
+        className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
+        style={{
+          background: 'hsl(228 18% 11%)',
+          border: `1px solid ${focused ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+          width: 200,
+          transition: 'border-color 0.15s',
+        }}
+      >
+        <Search size={13} style={{ color: 'var(--color-text-dim)', flexShrink: 0 }} />
+        <input
+          value={value}
+          onChange={e => setValue(e.target.value)}
+          onFocus={() => setFocused(true)}
+          onBlur={() => setFocused(false)}
+          placeholder="Search tickers…"
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            color: 'var(--color-text-primary)',
+          }}
+        />
+      </div>
+    </form>
+  )
+}
+
 export default function TopBar() {
   return (
     <header
@@ -60,19 +108,7 @@ export default function TopBar() {
 
       {/* Right — search + bell */}
       <div className="flex items-center gap-3">
-        <div
-          className="flex items-center gap-2 px-3 py-1.5 rounded-lg"
-          style={{
-            background: 'hsl(228 18% 11%)',
-            border: '1px solid var(--color-border)',
-            width: 200,
-          }}
-        >
-          <Search size={13} style={{ color: 'var(--color-text-dim)' }} />
-          <span style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
-            Search tickers, theses…
-          </span>
-        </div>
+        <TickerSearch />
         <button
           className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
           style={{ color: 'var(--color-text-dim)', border: '1px solid var(--color-border)', background: 'transparent' }}

@@ -83,10 +83,10 @@ async def simulation_stream(user: User | None = Depends(get_optional_user)):
             for entry in entries:
                 event_data = {
                     "id": entry.id,
-                    "agent": entry.agent_name,
+                    "agent_name": entry.agent_name,
                     "event_type": entry.event_type,
                     "thesis_id": entry.thesis_id,
-                    "data": entry.event_data,
+                    "event_data": entry.event_data,
                     "created_at": entry.created_at.isoformat() if entry.created_at else None,
                 }
                 yield f"data: {json.dumps(event_data, default=_json_safe)}\n\n"
@@ -125,11 +125,23 @@ async def api_theses(
     user: User = Depends(get_current_user),
 ):
     """All theses with lifecycle status."""
+    from sqlalchemy import select
     from core.database import AsyncSessionLocal
+    from core.models import Ticker
     from simulation.thesis_generator import get_thesis_lifecycle
 
     async with AsyncSessionLocal() as session:
         theses = await get_thesis_lifecycle(session, status_filter=status, limit=limit)
+
+        # Build ticker_id → symbol lookup
+        ticker_result = await session.execute(select(Ticker.id, Ticker.symbol))
+        ticker_map = {row.id: row.symbol for row in ticker_result}
+
+        for t in theses:
+            ids = t.get("ticker_ids") or []
+            t["ticker_symbols"] = [ticker_map[i] for i in ids if i in ticker_map]
+            t["ticker_symbol"] = t["ticker_symbols"][0] if t["ticker_symbols"] else None
+
         return JSONResponse(json.loads(json.dumps(theses, default=_json_safe)))
 
 
@@ -323,12 +335,20 @@ async def api_stats(user: User = Depends(get_current_user)):
             select(func.count(SimulationLog.id))
         )).scalar_one()
 
+        # Avg backtest performance
+        bt_perf = (await session.execute(
+            select(func.avg(BacktestRun.win_rate), func.avg(BacktestRun.sharpe))
+            .where(BacktestRun.win_rate.isnot(None))
+        )).one()
+
         return JSONResponse({
             "theses": {
                 "total": sum(thesis_counts.values()),
                 "by_status": thesis_counts,
             },
             "backtests": bt_count,
+            "avg_win_rate": float(bt_perf[0]) if bt_perf[0] is not None else None,
+            "avg_sharpe": float(bt_perf[1]) if bt_perf[1] is not None else None,
             "portfolio": {
                 "value": portfolio.current_value if portfolio else 100_000,
                 "pnl": portfolio.total_pnl if portfolio else 0,
@@ -338,3 +358,66 @@ async def api_stats(user: User = Depends(get_current_user)):
             "log_entries": log_count,
             "disclaimer": "ALL VALUES ARE SIMULATED PLAY-MONEY",
         })
+
+
+@router.get("/api/macro/pulse")
+async def api_macro_pulse(user: User = Depends(get_current_user)):
+    """Latest macro indicator values with change from previous reading."""
+    from sqlalchemy import desc, select
+    from core.database import AsyncSessionLocal
+    from core.models import MacroIndicator
+
+    SERIES_CONFIG = [
+        ("FEDFUNDS", "Fed Funds",    "rate"),
+        ("DGS10",    "10Y Yield",    "rate"),
+        ("DGS2",     "2Y Yield",     "rate"),
+        ("T10Y2Y",   "Yield Curve",  "spread"),
+        ("UNRATE",   "Unemployment", "rate"),
+        ("CPIAUCSL", "CPI",          "index"),
+    ]
+
+    async with AsyncSessionLocal() as session:
+        cards = []
+        for series_id, label, fmt in SERIES_CONFIG:
+            result = await session.execute(
+                select(MacroIndicator.value, MacroIndicator.date)
+                .where(MacroIndicator.series_id == series_id)
+                .order_by(desc(MacroIndicator.date))
+                .limit(2)
+            )
+            rows = result.all()
+            if not rows:
+                cards.append({
+                    "series_id": series_id, "label": label,
+                    "value_str": "—", "change_str": None, "direction": "flat", "as_of": None,
+                })
+                continue
+
+            latest_val = rows[0].value
+            prev_val = rows[1].value if len(rows) > 1 else None
+
+            if fmt == "rate":
+                value_str = f"{latest_val:.2f}%"
+            elif fmt == "spread":
+                value_str = f"{latest_val:+.2f}"
+            else:
+                value_str = f"{latest_val:.1f}"
+
+            if prev_val is not None:
+                delta = latest_val - prev_val
+                change_str = f"{delta:+.2f}pp" if fmt in ("rate", "spread") else f"{delta:+.1f}"
+                direction = "flat" if abs(delta) < 0.005 else ("up" if delta > 0 else "down")
+            else:
+                change_str = None
+                direction = "flat"
+
+            cards.append({
+                "series_id": series_id,
+                "label": label,
+                "value_str": value_str,
+                "change_str": change_str,
+                "direction": direction,
+                "as_of": str(rows[0].date),
+            })
+
+        return JSONResponse(cards)

@@ -29,6 +29,61 @@ export interface MacroIndicator {
   series_name: string | null
 }
 
+export interface MacroPulseCard {
+  series_id: string
+  label: string
+  value_str: string
+  change_str: string | null
+  direction: 'up' | 'down' | 'flat'
+  as_of: string | null
+}
+
+// ─── Ticker Detail ───
+
+export interface TickerSummary {
+  id: number
+  symbol: string
+  name: string | null
+  sector: string | null
+  in_watchlist: boolean
+  latest_close: number | null
+  daily_change_pct: number | null
+  price_date: string | null
+  technicals: {
+    date: string
+    rsi_14: number | null
+    macd: number | null
+    macd_signal: number | null
+    macd_histogram: number | null
+    macd_direction: 'bull' | 'bear'
+    bb_position: 'above upper' | 'in band' | 'below lower' | null
+    bb_upper: number | null
+    bb_lower: number | null
+    sma_20: number | null
+    sma_50: number | null
+    sma_200: number | null
+    volume_ratio_20d: number | null
+  } | null
+}
+
+export interface TickerPriceBar {
+  date: string
+  open: number | null
+  high: number | null
+  low: number | null
+  close: number
+  volume: number | null
+}
+
+export interface TickerAlert {
+  id: number
+  alert_type: string
+  severity: string
+  score: number | null
+  title: string
+  created_at: string
+}
+
 export interface WatchlistMover {
   symbol: string
   name: string | null
@@ -48,6 +103,8 @@ export interface SimulatedThesis {
   generated_by: string
   time_horizon_days: number | null
   ticker_ids: number[] | null
+  ticker_symbol: string | null
+  ticker_symbols: string[]
   created_at: string
   retired_at: string | null
   retirement_reason: string | null
@@ -159,6 +216,8 @@ export interface SimulationStats {
     by_status: Partial<Record<ThesisStatus, number>>
   }
   backtests: number
+  avg_win_rate: number | null
+  avg_sharpe: number | null
   portfolio: {
     value: number
     pnl: number
