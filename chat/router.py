@@ -1,11 +1,14 @@
 """
 EdgeFinder — Persona Router
 
-Three-tier routing (cheapest first):
+Four-tier routing (cheapest first):
   1. Explicit @prefix (free)
   2. Keyword heuristics (free)
   3. Haiku classifier (fallback, ~$0.001/call)
   4. Default: continue with conversation's active persona
+
+Supports 8 personas: analyst, thesis, pm, thesis_lord, vol_slayer,
+heston_cal, deep_hedge, post_mortem.
 """
 
 from __future__ import annotations
@@ -20,7 +23,10 @@ logger = logging.getLogger(__name__)
 # Tier 1: Explicit prefix
 # ---------------------------------------------------------------------------
 
-_PREFIX_RE = re.compile(r"^[@/](analyst|thesis|pm)\b\s*", re.IGNORECASE)
+_PREFIX_RE = re.compile(
+    r"^[@/](analyst|thesis|pm|thesis_lord|vol_slayer|heston_cal|deep_hedge|post_mortem)\b\s*",
+    re.IGNORECASE,
+)
 
 
 def _check_prefix(text: str) -> tuple[str | None, str]:
@@ -53,9 +59,61 @@ _THESIS_PATTERNS = re.compile(
     re.IGNORECASE,
 )
 
+# --- Simulation Engine Persona Patterns ---
+
+_THESIS_LORD_PATTERNS = re.compile(
+    r"generate\s+thesis|backtest|paper\s+portfolio|paper\s+position|"
+    r"thesis\s+lifecycle|retire\s+thesis|kill\s+thesis|mutate\s+thesis|"
+    r"simulate|simulation\s+log|play.?money",
+    re.IGNORECASE,
+)
+
+_VOL_SLAYER_PATTERNS = re.compile(
+    r"vol\s+surface|implied\s+vol|iv\s+surface|\bskew\b|"
+    r"options?\s+chain|term\s+structure|vol\s+smile|"
+    r"implied\s+vs\s+realized|put.?call\s+skew",
+    re.IGNORECASE,
+)
+
+_HESTON_PATTERNS = re.compile(
+    r"\bheston\b|stochastic\s+vol|calibrat|monte\s+carlo|"
+    r"characteristic\s+function|feller\s+condition|"
+    r"vol.?of.?vol|mean.?reversion|qe\s+scheme",
+    re.IGNORECASE,
+)
+
+_DEEP_HEDGE_PATTERNS = re.compile(
+    r"deep\s+hedg|neural\s+hedg|cvar\s+loss|hedging\s+policy|buehler",
+    re.IGNORECASE,
+)
+
+_POST_MORTEM_PATTERNS = re.compile(
+    r"post.?mortem|what\s+went\s+wrong|lessons?\s+learned|"
+    r"retired\s+thesis|agent\s+memor|decision\s+log|"
+    r"scar\s+tissue|why\s+did\s+.+\s+fail",
+    re.IGNORECASE,
+)
+
 
 def _check_keywords(text: str) -> str | None:
-    """Return persona name based on keyword matching, or None."""
+    """Return persona name based on keyword matching, or None.
+
+    Priority: simulation-specific patterns first (more specific),
+    then original patterns (broader).
+    """
+    # Simulation engine personas (most specific first)
+    if _HESTON_PATTERNS.search(text):
+        return "heston_cal"
+    if _VOL_SLAYER_PATTERNS.search(text):
+        return "vol_slayer"
+    if _DEEP_HEDGE_PATTERNS.search(text):
+        return "deep_hedge"
+    if _POST_MORTEM_PATTERNS.search(text):
+        return "post_mortem"
+    if _THESIS_LORD_PATTERNS.search(text):
+        return "thesis_lord"
+
+    # Original personas
     if _PM_PATTERNS.search(text):
         return "pm"
     if _THESIS_PATTERNS.search(text):
@@ -69,10 +127,16 @@ def _check_keywords(text: str) -> str | None:
 
 _ROUTER_SYSTEM = (
     "Classify this user message for a market intelligence chatbot. "
-    'Return ONLY valid JSON: {"persona": "<analyst|thesis|pm>"}\n\n'
-    '- "analyst": User wants data, numbers, analysis of specific tickers, market conditions, or a briefing.\n'
-    '- "thesis": User wants creative strategy ideas, correlations, risk/reward thinking, or investment thesis generation.\n'
-    '- "pm": User is requesting a feature that doesn\'t exist, reporting a bug, or asking about platform capabilities.\n\n'
+    'Return ONLY valid JSON: {"persona": "<name>"}\n\n'
+    'Valid persona names:\n'
+    '- "analyst": Data, numbers, analysis of specific tickers, market conditions, briefings.\n'
+    '- "thesis": Creative strategy ideas, correlations, risk/reward thinking.\n'
+    '- "pm": Feature requests, bug reports, platform capabilities.\n'
+    '- "thesis_lord": Thesis generation, backtesting, paper portfolio management, simulations.\n'
+    '- "vol_slayer": Implied vol surfaces, skew, options chain analysis, term structure.\n'
+    '- "heston_cal": Heston model, stochastic vol, calibration, Monte Carlo paths.\n'
+    '- "deep_hedge": Deep hedging, neural hedging policies, CVaR optimization.\n'
+    '- "post_mortem": Post-mortems, lessons learned, agent memories, what went wrong.\n\n'
     "If unsure, default to analyst."
 )
 
@@ -92,7 +156,8 @@ async def _classify_with_haiku(text: str, api_key: str) -> str:
         raw = response.content[0].text.strip()
         data = json.loads(raw)
         persona = data.get("persona", "analyst")
-        if persona in ("analyst", "thesis", "pm"):
+        valid = {"analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
+        if persona in valid:
             return persona
     except Exception as exc:
         logger.warning("Haiku routing failed: %s", exc)

@@ -10,8 +10,11 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . .
+RUN chmod +x entrypoint.sh
+
+ENV PYTHONPATH=/app
 
 EXPOSE 8050
 
-# Default: run web server. Railway injects $PORT; fall back to 8050 for local Docker.
-CMD uvicorn api.app:create_app --factory --host 0.0.0.0 --port ${PORT:-8050}
+# Dispatch via PROCESS_TYPE env var: "web" (default) or "worker"
+CMD ["./entrypoint.sh"]

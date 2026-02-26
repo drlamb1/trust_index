@@ -11,7 +11,8 @@ DAYS    ?= 365       # override with: make ingest-prices DAYS=90
         create-admin \
         ingest-prices ingest-filings ingest-insider ingest-news ingest-macro ingest-transcripts \
         ticker-list \
-        railway-deploy railway-migrate railway-admin railway-logs
+        railway-deploy railway-deploy-worker railway-deploy-all \
+        railway-migrate railway-admin railway-logs railway-logs-worker
 
 # ── Help ────────────────────────────────────────────────────────────────────────
 
@@ -48,10 +49,13 @@ help:
 	@echo "    make ticker-list        List active tickers"
 	@echo ""
 	@echo "  Railway (production)"
-	@echo "    make railway-deploy     Deploy to Railway"
-	@echo "    make railway-migrate    Run migrations on Railway"
-	@echo "    make railway-admin      Create admin user on Railway"
-	@echo "    make railway-logs       Tail Railway service logs"
+	@echo "    make railway-deploy        Deploy web to Railway"
+	@echo "    make railway-deploy-worker Deploy worker to Railway"
+	@echo "    make railway-deploy-all    Deploy web + worker"
+	@echo "    make railway-migrate       Run migrations on Railway"
+	@echo "    make railway-admin         Create admin user on Railway"
+	@echo "    make railway-logs          Tail web service logs"
+	@echo "    make railway-logs-worker   Tail worker service logs"
 	@echo ""
 
 # ── Docker (local dev — Redis only) ──────────────────────────────────────────
@@ -131,15 +135,38 @@ ticker-list:
 # ── Railway (production) ────────────────────────────────────────────────────
 
 railway-deploy:
-	railway up
+	railway up --service edgefinder
+
+railway-deploy-worker:
+	railway up --service edgefinder-worker
+
+railway-deploy-all:
+	railway up --service edgefinder
+	railway up --service edgefinder-worker
 
 railway-migrate:
-	railway run python -m alembic upgrade head
+	railway run .venv/bin/python -m alembic upgrade head
 
 railway-admin:
 	@read -p "Email: " email; \
 	read -sp "Password: " password; echo; \
-	railway run python cli.py create-admin --email "$$email" --password "$$password"
+	railway run .venv/bin/python cli.py create-admin --email "$$email" --password "$$password"
 
 railway-logs:
-	railway logs
+	railway logs --service edgefinder
+
+railway-logs-worker:
+	railway logs --service edgefinder-worker
+
+# ── Simulation Engine ──────────────────────────────────────────────────────
+
+simulation-worker: up
+	$(PYTHON) -m celery -A scheduler.tasks worker -Q simulation -c 2 --loglevel=info
+
+railway-deploy-simulation:
+	railway up --service edgefinder-simulation
+
+railway-deploy-all-3:
+	railway up --service edgefinder
+	railway up --service edgefinder-worker
+	railway up --service edgefinder-simulation

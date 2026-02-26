@@ -26,6 +26,7 @@ Usage:
 from __future__ import annotations
 
 import logging
+import os
 from collections.abc import AsyncGenerator
 
 import tenacity
@@ -35,6 +36,7 @@ from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
 )
+from sqlalchemy.pool import NullPool
 
 from config.settings import settings
 
@@ -61,18 +63,29 @@ if "sslmode=require" in settings.database_url:
 
     _connect_args["ssl"] = _ssl_mod.create_default_context()
 
-engine = create_async_engine(
-    _db_url,
-    pool_size=5,
-    max_overflow=2,
-    # Critical for Neon: re-tests connection aliveness before using from pool
-    pool_pre_ping=True,
-    # Recycle connections every 5 minutes (Neon pauses after 5 min of inactivity)
-    pool_recycle=300,
-    # Log SQL in development for debugging
-    echo=False,
-    connect_args=_connect_args,
-)
+# Celery workers call asyncio.run() per task, which creates and closes event
+# loops. A connection pool bound to one loop becomes invalid in the next task.
+# NullPool creates a fresh connection each time, avoiding stale-loop errors.
+# NullPool required for any Celery process type (worker, simulation-worker, beat)
+# because each task calls asyncio.run(), creating/destroying event loops.
+_is_worker = os.environ.get("PROCESS_TYPE") in ("worker", "simulation-worker", "beat")
+
+_engine_kwargs: dict = {
+    "echo": False,
+    "connect_args": _connect_args,
+}
+
+if _is_worker:
+    _engine_kwargs["poolclass"] = NullPool
+else:
+    _engine_kwargs.update(
+        pool_size=5,
+        max_overflow=2,
+        pool_pre_ping=True,
+        pool_recycle=300,
+    )
+
+engine = create_async_engine(_db_url, **_engine_kwargs)
 
 # ---------------------------------------------------------------------------
 # Session factory

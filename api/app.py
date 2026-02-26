@@ -23,6 +23,7 @@ from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
 
 from api.dependencies import get_optional_user
+from api.simulation_routes import router as simulation_router
 from config.settings import settings
 from core.models import User
 
@@ -1289,6 +1290,7 @@ def create_app() -> FastAPI:
     app.include_router(admin_router)
     app.include_router(auth_router)
     app.include_router(chat_router)
+    app.include_router(simulation_router)
 
     @app.on_event("startup")
     async def startup_warnings():

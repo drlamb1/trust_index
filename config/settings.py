@@ -123,6 +123,31 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # Simulation Engine — all play-money, zero real capital
+    # -------------------------------------------------------------------------
+    simulation_initial_capital: float = Field(
+        default=100_000.0, description="Starting capital for paper portfolios (play money)"
+    )
+    simulation_max_open_positions: int = Field(
+        default=10, description="Max concurrent paper positions per portfolio"
+    )
+    simulation_default_stop_loss_pct: float = Field(
+        default=8.0, description="Default stop-loss percentage for paper positions"
+    )
+    simulation_default_take_profit_pct: float = Field(
+        default=20.0, description="Default take-profit percentage for paper positions"
+    )
+    heston_mc_paths: int = Field(
+        default=10_000, description="Number of Monte Carlo paths for Heston simulation"
+    )
+    heston_mc_steps: int = Field(
+        default=252, description="Time steps per path (252 = daily for 1 year)"
+    )
+    deep_hedging_enabled: bool = Field(
+        default=False, description="Enable deep hedging experiments (requires PyTorch)"
+    )
+
+    # -------------------------------------------------------------------------
     # Derived helpers
     # -------------------------------------------------------------------------
     @property
@@ -148,6 +173,10 @@ class Settings(BaseSettings):
     @property
     def has_fmp(self) -> bool:
         return bool(self.fmp_api_key)
+
+    @property
+    def has_polygon(self) -> bool:
+        return bool(self.polygon_api_key)
 
     @field_validator("edgar_user_agent")
     @classmethod

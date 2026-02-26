@@ -93,6 +93,16 @@ celery_app.conf.update(
         "scheduler.tasks.task_check_snoozed_alerts": {"queue": "alerts"},
         "scheduler.tasks.task_send_daily_briefing": {"queue": "delivery"},
         "scheduler.tasks.task_send_weekly_digest": {"queue": "delivery"},
+        # Simulation queue
+        "scheduler.tasks.task_fetch_options_chains": {"queue": "ingestion"},
+        "scheduler.tasks.task_calibrate_heston_batch": {"queue": "simulation"},
+        "scheduler.tasks.task_build_vol_surfaces": {"queue": "simulation"},
+        "scheduler.tasks.task_generate_theses": {"queue": "simulation"},
+        "scheduler.tasks.task_backtest_thesis": {"queue": "simulation"},
+        "scheduler.tasks.task_paper_portfolio_mark": {"queue": "simulation"},
+        "scheduler.tasks.task_check_paper_stops": {"queue": "simulation"},
+        "scheduler.tasks.task_thesis_lifecycle_review": {"queue": "simulation"},
+        "scheduler.tasks.task_agent_memory_consolidation": {"queue": "simulation"},
     },
     # Default queue for unrouted tasks
     task_default_queue="ingestion",
@@ -110,61 +120,61 @@ celery_app.conf.beat_schedule = {
     "fetch-intraday-prices": {
         "task": "scheduler.tasks.task_fetch_prices_batch",
         "schedule": crontab(minute="*/15", hour="14-21", day_of_week="1-5"),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # EOD price confirmation — 9 PM UTC (4 PM EST) Mon-Fri
     "fetch-eod-prices": {
         "task": "scheduler.tasks.task_fetch_eod_prices",
         "schedule": crontab(minute=0, hour=21, day_of_week="1-5"),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # S&P 500 constituent sync — weekly on Sunday at 6 AM UTC
     "sync-sp500": {
         "task": "scheduler.tasks.task_sync_sp500",
         "schedule": crontab(minute=0, hour=6, day_of_week=0),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # EDGAR new filings check — every 2 hours Mon-Fri during trading hours
     "fetch-new-filings": {
         "task": "scheduler.tasks.task_fetch_new_filings",
         "schedule": crontab(minute=0, hour="*/2", day_of_week="1-5"),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # News aggregation — every 30 minutes (all week)
     "aggregate-news": {
         "task": "scheduler.tasks.task_aggregate_news",
         "schedule": crontab(minute="*/30"),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # Insider trades (Form 4) — twice daily Mon-Fri
     "fetch-insider-trades": {
         "task": "scheduler.tasks.task_fetch_insider_trades",
         "schedule": crontab(minute=0, hour="8,17", day_of_week="1-5"),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # 13F institutional holdings — Monday 7 AM UTC (quarterly filings but check weekly)
     "fetch-institutional": {
         "task": "scheduler.tasks.task_fetch_institutional",
         "schedule": crontab(minute=0, hour=7, day_of_week=1),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # Earnings calendar sync — daily at 6 AM UTC
     "sync-earnings-calendar": {
         "task": "scheduler.tasks.task_sync_earnings_calendar",
         "schedule": crontab(minute=0, hour=6),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # FRED macro indicators — daily at 6:30 AM UTC
     "fetch-macro-data": {
         "task": "scheduler.tasks.task_fetch_macro_data",
         "schedule": crontab(minute=30, hour=6),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # Earnings transcripts — daily at 7:30 AM UTC (after earnings calendar sync)
     "fetch-transcripts": {
         "task": "scheduler.tasks.task_fetch_transcripts",
         "schedule": crontab(minute=30, hour=7),
-        "queue": "ingestion",
+        "options": {"queue": "ingestion"},
     },
     # ================================================================
     # ANALYSIS QUEUE
@@ -173,50 +183,50 @@ celery_app.conf.beat_schedule = {
     "compute-technicals-eod": {
         "task": "scheduler.tasks.task_compute_technicals_batch",
         "schedule": crontab(minute=35, hour=21, day_of_week="1-5"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Filing analysis — process new filings every 3 hours Mon-Fri
     "analyze-pending-filings": {
         "task": "scheduler.tasks.task_analyze_pending_filings",
         "schedule": crontab(minute=0, hour="*/3", day_of_week="1-5"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Batch sentiment scoring — hourly at :45 (offset from other jobs)
     "score-news-sentiment": {
         "task": "scheduler.tasks.task_run_sentiment_batch",
         "schedule": crontab(minute=45, hour="*"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Anomaly detection — 45 min after EOD (9:45 PM UTC Mon-Fri)
     "detect-anomalies": {
         "task": "scheduler.tasks.task_detect_anomalies",
         "schedule": crontab(minute=45, hour=21, day_of_week="1-5"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Sector rotation — 10 PM UTC Mon-Fri (after technicals complete)
     "compute-sector-rotation": {
         "task": "scheduler.tasks.task_compute_sector_rotation",
         "schedule": crontab(minute=0, hour=22, day_of_week="1-5"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Thesis matching — 10:30 PM UTC daily
     "match-theses": {
         "task": "scheduler.tasks.task_run_thesis_matching",
         "schedule": crontab(minute=30, hour=22),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Earnings transcript analysis — 11 PM UTC daily (after transcripts fetched)
     "analyze-transcripts": {
         "task": "scheduler.tasks.task_analyze_transcripts",
         "schedule": crontab(minute=0, hour=23),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # Neon DB keepalive — every 3 minutes during market hours to prevent cold starts
     # Neon free tier pauses after 5 min of inactivity
     "db-keepalive": {
         "task": "scheduler.tasks.task_db_keepalive",
         "schedule": crontab(minute="*/3", hour="13-22", day_of_week="1-5"),
-        "queue": "analysis",
+        "options": {"queue": "analysis"},
     },
     # ================================================================
     # ALERTS QUEUE
@@ -225,19 +235,19 @@ celery_app.conf.beat_schedule = {
     "run-alert-engine": {
         "task": "scheduler.tasks.task_run_alert_engine",
         "schedule": crontab(minute="*/15", hour="14-22", day_of_week="1-5"),
-        "queue": "alerts",
+        "options": {"queue": "alerts"},
     },
     # DipScore computation — every 30 min during market hours
     "compute-dip-scores": {
         "task": "scheduler.tasks.task_compute_dip_scores",
         "schedule": crontab(minute="*/30", hour="14-21", day_of_week="1-5"),
-        "queue": "alerts",
+        "options": {"queue": "alerts"},
     },
     # Snoozed alert expiry — every 5 minutes
     "check-snoozed-alerts": {
         "task": "scheduler.tasks.task_check_snoozed_alerts",
         "schedule": crontab(minute="*/5"),
-        "queue": "alerts",
+        "options": {"queue": "alerts"},
     },
     # ================================================================
     # DELIVERY QUEUE
@@ -246,13 +256,65 @@ celery_app.conf.beat_schedule = {
     "send-daily-briefing": {
         "task": "scheduler.tasks.task_send_daily_briefing",
         "schedule": crontab(minute=0, hour=7),
-        "queue": "delivery",
+        "options": {"queue": "delivery"},
     },
     # Weekly digest — Sunday 8 PM UTC
     "send-weekly-digest": {
         "task": "scheduler.tasks.task_send_weekly_digest",
         "schedule": crontab(minute=0, hour=20, day_of_week=0),
-        "queue": "delivery",
+        "options": {"queue": "delivery"},
+    },
+    # ================================================================
+    # SIMULATION QUEUE — thesis lifecycle, vol modeling, paper portfolio
+    # All P&L is play-money. Zero real capital.
+    # ================================================================
+    # Options chain fetch — daily after EOD prices (9:15 PM UTC Mon-Fri)
+    "fetch-options-chains": {
+        "task": "scheduler.tasks.task_fetch_options_chains",
+        "schedule": crontab(minute=15, hour=21, day_of_week="1-5"),
+        "options": {"queue": "ingestion"},
+    },
+    # Heston calibration — daily after options data (9:30 PM UTC Mon-Fri)
+    "calibrate-heston-batch": {
+        "task": "scheduler.tasks.task_calibrate_heston_batch",
+        "schedule": crontab(minute=30, hour=21, day_of_week="1-5"),
+        "options": {"queue": "simulation"},
+    },
+    # Vol surface construction — daily after calibration (9:45 PM UTC Mon-Fri)
+    "build-vol-surfaces": {
+        "task": "scheduler.tasks.task_build_vol_surfaces",
+        "schedule": crontab(minute=45, hour=21, day_of_week="1-5"),
+        "options": {"queue": "simulation"},
+    },
+    # Thesis generation — every 6 hours (0, 6, 12, 18 UTC)
+    "generate-theses": {
+        "task": "scheduler.tasks.task_generate_theses",
+        "schedule": crontab(minute=0, hour="0,6,12,18"),
+        "options": {"queue": "simulation"},
+    },
+    # Paper portfolio mark-to-market — daily at 10 PM UTC
+    "paper-portfolio-mark": {
+        "task": "scheduler.tasks.task_paper_portfolio_mark",
+        "schedule": crontab(minute=0, hour=22, day_of_week="1-5"),
+        "options": {"queue": "simulation"},
+    },
+    # Paper stop-loss/take-profit checks — every 15 min during market hours
+    "check-paper-stops": {
+        "task": "scheduler.tasks.task_check_paper_stops",
+        "schedule": crontab(minute="*/15", hour="14-21", day_of_week="1-5"),
+        "options": {"queue": "simulation"},
+    },
+    # Thesis lifecycle review — daily at 11 PM UTC
+    "thesis-lifecycle-review": {
+        "task": "scheduler.tasks.task_thesis_lifecycle_review",
+        "schedule": crontab(minute=0, hour=23),
+        "options": {"queue": "simulation"},
+    },
+    # Agent memory consolidation — Sundays 10 PM UTC
+    "agent-memory-consolidation": {
+        "task": "scheduler.tasks.task_agent_memory_consolidation",
+        "schedule": crontab(minute=0, hour=22, day_of_week=0),
+        "options": {"queue": "simulation"},
     },
 }
 
@@ -1061,4 +1123,384 @@ def task_send_weekly_digest() -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_send_weekly_digest failed: %s", exc)
+        raise
+
+
+# =========================================================================
+# SIMULATION ENGINE TASKS
+# All P&L is simulated play-money. Zero real capital at risk.
+# =========================================================================
+
+
+@celery_app.task(name="scheduler.tasks.task_fetch_options_chains", bind=True, max_retries=2)
+def task_fetch_options_chains(self) -> dict:
+    """Fetch options chain data for all watchlist tickers."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from ingestion.options_data import fetch_options_batch
+
+        async with AsyncSessionLocal() as session:
+            result = await fetch_options_batch(session)
+            await session.commit()
+            return result
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_options_chains failed: %s", exc)
+        raise self.retry(exc=exc, countdown=120)
+
+
+@celery_app.task(name="scheduler.tasks.task_calibrate_heston_batch", bind=True, max_retries=1)
+def task_calibrate_heston_batch(self) -> dict:
+    """Calibrate Heston model for tickers with options data."""
+
+    async def _run():
+        from datetime import date as date_type
+
+        from sqlalchemy import func, select
+
+        from core.database import AsyncSessionLocal
+        from core.models import HestonCalibration, OptionsChain, PriceBar, Ticker
+        from simulation.heston import HestonParams, calibrate_heston
+
+        async with AsyncSessionLocal() as session:
+            # Find tickers with recent options data
+            result = await session.execute(
+                select(Ticker).where(Ticker.in_watchlist.is_(True), Ticker.is_active.is_(True))
+            )
+            tickers = result.scalars().all()
+            calibrated = 0
+
+            for ticker in tickers:
+                try:
+                    # Get latest options chain
+                    opts_result = await session.execute(
+                        select(OptionsChain).where(
+                            OptionsChain.ticker_id == ticker.id,
+                            OptionsChain.implied_vol.isnot(None),
+                            OptionsChain.implied_vol > 0,
+                        ).order_by(OptionsChain.fetched_at.desc()).limit(200)
+                    )
+                    options = opts_result.scalars().all()
+                    if len(options) < 10:
+                        continue
+
+                    # Get current price
+                    price_result = await session.execute(
+                        select(PriceBar.close).where(
+                            PriceBar.ticker_id == ticker.id
+                        ).order_by(PriceBar.date.desc()).limit(1)
+                    )
+                    S = price_result.scalar_one_or_none()
+                    if S is None:
+                        continue
+
+                    import numpy as np
+                    strikes = np.array([float(o.strike) for o in options])
+                    ivs = np.array([float(o.implied_vol) for o in options])
+                    today = date_type.today()
+                    expiries = np.array([(o.expiration - today).days / 365.0 for o in options])
+                    expiries = np.maximum(expiries, 0.01)
+
+                    params, rmse = calibrate_heston(ivs, strikes, expiries, float(S), 0.05)
+
+                    cal = HestonCalibration(
+                        ticker_id=ticker.id,
+                        as_of=today,
+                        v0=params.v0,
+                        kappa=params.kappa,
+                        theta=params.theta,
+                        sigma_v=params.sigma_v,
+                        rho=params.rho,
+                        calibration_error=rmse,
+                        market_iv_snapshot={"count": len(options), "mean_iv": float(np.mean(ivs))},
+                    )
+                    session.add(cal)
+                    calibrated += 1
+
+                except Exception as e:
+                    logger.warning("Heston calibration failed for %s: %s", ticker.symbol, e)
+
+            await session.commit()
+            return {"calibrated": calibrated}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_calibrate_heston_batch failed: %s", exc)
+        raise self.retry(exc=exc, countdown=300)
+
+
+@celery_app.task(name="scheduler.tasks.task_build_vol_surfaces")
+def task_build_vol_surfaces() -> dict:
+    """Build vol surfaces from options data for watchlist tickers."""
+
+    async def _run():
+        from datetime import date as date_type
+
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import OptionsChain, PriceBar, Ticker, VolSurface
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(Ticker).where(Ticker.in_watchlist.is_(True), Ticker.is_active.is_(True))
+            )
+            tickers = result.scalars().all()
+            built = 0
+
+            for ticker in tickers:
+                try:
+                    opts_result = await session.execute(
+                        select(OptionsChain).where(
+                            OptionsChain.ticker_id == ticker.id,
+                        ).order_by(OptionsChain.fetched_at.desc()).limit(500)
+                    )
+                    options = opts_result.scalars().all()
+                    if len(options) < 10:
+                        continue
+
+                    from simulation.vol_surface import build_iv_surface, surface_to_grid
+                    import pandas as pd
+
+                    today = date_type.today()
+                    df = pd.DataFrame([{
+                        "strike": float(o.strike),
+                        "expiry_years": max((o.expiration - today).days / 365.0, 0.01),
+                        "call_put": o.call_put,
+                        "bid": o.bid or 0,
+                        "ask": o.ask or 0,
+                        "volume": o.volume or 0,
+                        "open_interest": o.open_interest or 0,
+                        "implied_vol": o.implied_vol,
+                    } for o in options])
+
+                    price_result = await session.execute(
+                        select(PriceBar.close).where(
+                            PriceBar.ticker_id == ticker.id
+                        ).order_by(PriceBar.date.desc()).limit(1)
+                    )
+                    S = price_result.scalar_one_or_none()
+                    if S is None:
+                        continue
+
+                    surface_df = build_iv_surface(df, float(S), 0.05)
+                    if surface_df.empty:
+                        continue
+
+                    grid = surface_to_grid(surface_df)
+
+                    vol_surface = VolSurface(
+                        ticker_id=ticker.id,
+                        as_of=today,
+                        surface_data=grid,
+                        model_type="svi",
+                        calibration_error=None,
+                    )
+                    session.add(vol_surface)
+                    built += 1
+
+                except Exception as e:
+                    logger.warning("Vol surface build failed for %s: %s", ticker.symbol, e)
+
+            await session.commit()
+            return {"surfaces_built": built}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_build_vol_surfaces failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_generate_theses")
+def task_generate_theses() -> dict:
+    """Detect signal convergences and generate new theses."""
+
+    async def _run():
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from simulation.thesis_generator import detect_signal_convergence, generate_thesis
+
+        if not settings.has_anthropic:
+            return {"skipped": "No Anthropic API key"}
+
+        async with AsyncSessionLocal() as session:
+            convergences = await detect_signal_convergence(session)
+            generated = 0
+
+            for conv in convergences[:3]:  # max 3 new theses per cycle
+                thesis = await generate_thesis(session, conv, settings.anthropic_api_key)
+                if thesis:
+                    generated += 1
+
+            await session.commit()
+            return {"convergences_found": len(convergences), "theses_generated": generated}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_generate_theses failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_backtest_thesis", bind=True, max_retries=1)
+def task_backtest_thesis(self, thesis_id: int, ticker_id: int) -> dict:
+    """Run a walk-forward backtest for a specific thesis."""
+
+    async def _run():
+        from datetime import date as date_type, timedelta
+
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import SimulatedThesis
+        from simulation.backtester import BacktestConfig, run_backtest
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(SimulatedThesis).where(SimulatedThesis.id == thesis_id)
+            )
+            thesis = result.scalar_one_or_none()
+            if thesis is None:
+                return {"error": f"Thesis {thesis_id} not found"}
+
+            config = BacktestConfig(
+                start_date=date_type.today() - timedelta(days=365),
+                end_date=date_type.today(),
+            )
+
+            backtest_run = await run_backtest(session, thesis, ticker_id, config)
+            await session.commit()
+
+            return {
+                "thesis_id": thesis_id,
+                "ticker_id": ticker_id,
+                "sharpe": backtest_run.sharpe,
+                "sortino": backtest_run.sortino,
+                "max_drawdown": backtest_run.max_drawdown,
+                "total_trades": backtest_run.total_trades,
+                "monte_carlo_p_value": backtest_run.monte_carlo_p_value,
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_backtest_thesis failed: %s", exc)
+        raise self.retry(exc=exc, countdown=60)
+
+
+@celery_app.task(name="scheduler.tasks.task_paper_portfolio_mark")
+def task_paper_portfolio_mark() -> dict:
+    """Daily mark-to-market of the paper portfolio."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from simulation.paper_portfolio import daily_mark_to_market, get_or_create_portfolio
+
+        async with AsyncSessionLocal() as session:
+            portfolio = await get_or_create_portfolio(session)
+            result = await daily_mark_to_market(session, portfolio)
+            await session.commit()
+            return result
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_paper_portfolio_mark failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_check_paper_stops")
+def task_check_paper_stops() -> dict:
+    """Check paper positions for stop-loss/take-profit triggers."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from simulation.paper_portfolio import check_stops, get_or_create_portfolio
+
+        async with AsyncSessionLocal() as session:
+            portfolio = await get_or_create_portfolio(session)
+            closed = await check_stops(session, portfolio)
+            await session.commit()
+            return {"positions_closed": len(closed)}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_check_paper_stops failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_thesis_lifecycle_review")
+def task_thesis_lifecycle_review() -> dict:
+    """Daily review of live theses — flag underperformers for mutation/retirement."""
+
+    async def _run():
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import SimulatedThesis, ThesisStatus
+        from simulation.thesis_generator import retire_thesis
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(SimulatedThesis).where(
+                    SimulatedThesis.status == ThesisStatus.PAPER_LIVE.value
+                )
+            )
+            live_theses = result.scalars().all()
+            reviewed = 0
+            retired = 0
+
+            for thesis in live_theses:
+                reviewed += 1
+                # Check time horizon expiry
+                if thesis.time_horizon_days and thesis.created_at:
+                    horizon_end = thesis.created_at + timedelta(days=thesis.time_horizon_days)
+                    if datetime.now(timezone.utc) > horizon_end:
+                        await retire_thesis(
+                            session, thesis.id,
+                            reason="Time horizon expired",
+                            agent_name="lifecycle_review",
+                        )
+                        retired += 1
+
+            await session.commit()
+            return {"reviewed": reviewed, "retired": retired}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_thesis_lifecycle_review failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_agent_memory_consolidation")
+def task_agent_memory_consolidation() -> dict:
+    """Weekly consolidation of agent memories from simulation log."""
+
+    async def _run():
+        from config.settings import settings
+        from core.database import AsyncSessionLocal
+        from simulation.memory import consolidate_memories, prune_stale_memories
+
+        if not settings.has_anthropic:
+            return {"skipped": "No Anthropic API key"}
+
+        async with AsyncSessionLocal() as session:
+            created = await consolidate_memories(session, settings.anthropic_api_key)
+            pruned = await prune_stale_memories(session)
+            await session.commit()
+            return {"memories_created": created, "memories_pruned": pruned}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_agent_memory_consolidation failed: %s", exc)
         raise

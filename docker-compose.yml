@@ -11,20 +11,33 @@ services:
     ports:
       - "${DASHBOARD_PORT:-8050}:8050"
     env_file: .env
+    environment:
+      - PROCESS_TYPE=web
     depends_on:
       redis:
         condition: service_healthy
-    command: uvicorn api.app:create_app --factory --host 0.0.0.0 --port 8050
     restart: unless-stopped
 
   worker:
     build: .
     container_name: edgefinder-worker
     env_file: .env
+    environment:
+      - PROCESS_TYPE=worker
     depends_on:
       redis:
         condition: service_healthy
-    command: celery -A scheduler.tasks worker -l info -Q ingestion,analysis,alerts,briefings
+    restart: unless-stopped
+
+  simulation-worker:
+    build: .
+    container_name: edgefinder-simulation
+    env_file: .env
+    environment:
+      - PROCESS_TYPE=simulation-worker
+    depends_on:
+      redis:
+        condition: service_healthy
     restart: unless-stopped
 
   redis:

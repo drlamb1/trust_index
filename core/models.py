@@ -1,7 +1,7 @@
 """
 EdgeFinder — SQLAlchemy ORM Models
 
-All 15 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
+All 33 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
 with full type annotations.
 
 PostgreSQL-specific types:
@@ -12,6 +12,18 @@ SQLite compatibility (for tests):
   JSON fields use JSON (not JSONB) on SQLite.
   ARRAY fields use JSON on SQLite (serialized as [1, 2, 3]).
   This is handled via SQLAlchemy's .with_variant() mechanism.
+
+Models 24-33 (Simulation Engine):
+  - OptionsChain: market options data (IV, Greeks, bid/ask)
+  - VolSurface: fitted implied volatility surfaces (SVI, Heston, etc.)
+  - HestonCalibration: calibrated Heston stochastic vol params
+  - SimulatedThesis: auto-generated investment theses with lifecycle
+  - BacktestRun: walk-forward backtest results with Monte Carlo p-values
+  - PaperPortfolio: simulated play-money portfolio
+  - PaperPosition: individual paper positions linked to theses
+  - SimulationLog: immutable decision log for agent transparency
+  - DeepHedgingModel: trained deep hedging policy metadata
+  - AgentMemory: long-term agent learning and pattern recognition
 """
 
 from __future__ import annotations
@@ -30,6 +42,7 @@ from sqlalchemy import (
     ForeignKey,
     Index,
     Integer,
+    LargeBinary,
     Numeric,
     String,
     Text,
@@ -116,6 +129,63 @@ class NewsTier(int, enum.Enum):
     TIER1 = 2  # Reuters, WSJ, FT, Bloomberg
     TIER2 = 3  # Seeking Alpha, Yahoo Finance, CNBC
     SOCIAL = 4  # Reddit, StockTwits, Twitter
+
+
+# --- Simulation Engine Enums ---
+
+
+class ThesisStatus(str, enum.Enum):
+    """Lifecycle state of an auto-generated thesis."""
+
+    PROPOSED = "proposed"  # Claude generated it, awaiting backtest
+    BACKTESTING = "backtesting"  # Walk-forward sim in progress
+    PAPER_LIVE = "paper_live"  # Passed backtest, tracking with play money
+    RETIRED = "retired"  # Gracefully deactivated (time horizon expired, etc.)
+    KILLED = "killed"  # Failed hard — max drawdown, p-value > 0.10, etc.
+
+
+class PositionSide(str, enum.Enum):
+    LONG = "long"
+    SHORT = "short"
+
+
+class PositionStatus(str, enum.Enum):
+    OPEN = "open"
+    CLOSED = "closed"
+    STOPPED_OUT = "stopped_out"
+
+
+class SimEventType(str, enum.Enum):
+    """Immutable event types for the SimulationLog decision journal."""
+
+    GENERATION = "generation"
+    BACKTEST_START = "backtest_start"
+    BACKTEST_COMPLETE = "backtest_complete"
+    ENTRY = "entry"
+    EXIT = "exit"
+    STOP_TRIGGERED = "stop_triggered"
+    MUTATION = "mutation"
+    RETIREMENT = "retirement"
+    POST_MORTEM = "post_mortem"
+    MEMORY_CONSOLIDATED = "memory_consolidated"
+
+
+class VolModelType(str, enum.Enum):
+    """Volatility model used for surface fitting or calibration."""
+
+    BLACK_SCHOLES = "black_scholes"
+    HESTON = "heston"
+    SABR = "sabr"
+    SVI = "svi"
+
+
+class MemoryType(str, enum.Enum):
+    """Categories of durable agent knowledge."""
+
+    INSIGHT = "insight"  # "RSI oversold + insider buying → 73% hit rate"
+    PATTERN = "pattern"  # "Heston rho < -0.6 for tech names"
+    FAILURE = "failure"  # "Thesis X failed: ignored sector rotation"
+    SUCCESS = "success"  # "Energy thesis outperformed by 12%"
 
 
 # ---------------------------------------------------------------------------
@@ -808,3 +878,455 @@ class User(Base):
     daily_token_budget: Mapped[int] = mapped_column(Integer, default=50000)
     tokens_used_today: Mapped[int] = mapped_column(Integer, default=0)
     last_token_reset: Mapped[date | None] = mapped_column(Date)
+
+
+# =========================================================================
+# SIMULATION ENGINE MODELS (24-33)
+# =========================================================================
+# All P&L is simulated play-money. Zero real capital at risk.
+# These models power the thesis lifecycle, stochastic vol calibration,
+# backtesting, and agent self-improvement systems.
+# =========================================================================
+
+
+# ---------------------------------------------------------------------------
+# 24. OptionsChain — market options data for IV surface construction
+# ---------------------------------------------------------------------------
+
+
+class OptionsChain(Base):
+    __tablename__ = "options_chain"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+
+    expiration: Mapped[date] = mapped_column(Date, nullable=False)
+    strike: Mapped[Decimal] = mapped_column(Numeric(12, 2), nullable=False)
+    call_put: Mapped[str] = mapped_column(String(4), nullable=False)  # "call" or "put"
+
+    # Market data
+    bid: Mapped[float | None] = mapped_column(Float)
+    ask: Mapped[float | None] = mapped_column(Float)
+    last: Mapped[float | None] = mapped_column(Float)
+    volume: Mapped[int | None] = mapped_column(Integer)
+    open_interest: Mapped[int | None] = mapped_column(Integer)
+
+    # Derived / computed
+    implied_vol: Mapped[float | None] = mapped_column(Float)
+    delta: Mapped[float | None] = mapped_column(Float)
+    gamma: Mapped[float | None] = mapped_column(Float)
+    theta: Mapped[float | None] = mapped_column(Float)
+    vega: Mapped[float | None] = mapped_column(Float)
+
+    fetched_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        Index("ix_options_chain_ticker_exp_strike", "ticker_id", "expiration", "strike"),
+        Index("ix_options_chain_fetched", "fetched_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 25. VolSurface — fitted implied volatility surfaces
+# ---------------------------------------------------------------------------
+
+
+class VolSurface(Base):
+    """Stores a fitted vol surface (strike × expiry → IV grid).
+
+    Why we store the full surface: rebuilding from raw options data is expensive
+    (SVI calibration, arbitrage checks). Caching the fitted surface lets the
+    chat agents and dashboard render instantly.
+    """
+
+    __tablename__ = "vol_surfaces"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # The surface itself: JSON grid of {expiry: {strike: iv, ...}, ...}
+    surface_data: Mapped[dict | None] = mapped_column(JsonType)
+
+    # Model used to fit
+    model_type: Mapped[str] = mapped_column(String(20), nullable=False)  # VolModelType values
+    model_params: Mapped[dict | None] = mapped_column(JsonType)  # SVI a,b,rho,m,sigma etc.
+    calibration_error: Mapped[float | None] = mapped_column(Float)  # RMSE of fit
+
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("ticker_id", "as_of", "model_type", name="uq_vol_surface_ticker_date_model"),
+        Index("ix_vol_surface_ticker_date", "ticker_id", "as_of"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 26. HestonCalibration — calibrated Heston stochastic vol parameters
+# ---------------------------------------------------------------------------
+
+
+class HestonCalibration(Base):
+    """Stores calibrated Heston model parameters for a given ticker and date.
+
+    The Heston model: dS = r*S*dt + sqrt(v)*S*dW1
+                      dv = kappa*(theta - v)*dt + sigma_v*sqrt(v)*dW2
+                      corr(dW1, dW2) = rho
+
+    Five parameters capture what Black-Scholes cannot:
+      v0      — current instantaneous variance (not constant!)
+      kappa   — speed at which vol reverts to long-run mean
+      theta   — long-run variance level
+      sigma_v — vol-of-vol (how noisy the variance process itself is)
+      rho     — correlation between stock and vol shocks (leverage effect)
+    """
+
+    __tablename__ = "heston_calibrations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+    as_of: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # Heston parameters
+    v0: Mapped[float] = mapped_column(Float, nullable=False)
+    kappa: Mapped[float] = mapped_column(Float, nullable=False)
+    theta: Mapped[float] = mapped_column(Float, nullable=False)
+    sigma_v: Mapped[float] = mapped_column(Float, nullable=False)
+    rho: Mapped[float] = mapped_column(Float, nullable=False)
+
+    # Fit quality
+    calibration_error: Mapped[float | None] = mapped_column(Float)  # RMSE
+    market_iv_snapshot: Mapped[dict | None] = mapped_column(JsonType)  # input IVs used
+    calibrated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        UniqueConstraint("ticker_id", "as_of", name="uq_heston_cal_ticker_date"),
+        Index("ix_heston_cal_ticker_date", "ticker_id", "as_of"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 27. SimulatedThesis — auto-generated theses with full lifecycle
+# ---------------------------------------------------------------------------
+
+
+class SimulatedThesis(Base):
+    """An investment thesis generated by the agent swarm.
+
+    Unlike the static Thesis model (synced from theses.yaml), SimulatedThesis
+    objects are born, tested, tracked, mutated, and eventually retired or killed.
+    Every state transition is logged to SimulationLog for full auditability.
+
+    All positions linked to these theses are PLAY MONEY.
+    """
+
+    __tablename__ = "simulated_theses"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)
+    thesis_text: Mapped[str] = mapped_column(Text, nullable=False)
+
+    # Structured criteria for entry/exit
+    entry_criteria: Mapped[dict | None] = mapped_column(JsonType)
+    exit_criteria: Mapped[dict | None] = mapped_column(JsonType)
+    time_horizon_days: Mapped[int | None] = mapped_column(Integer)
+    expected_catalysts: Mapped[list | None] = mapped_column(JsonType)
+    risk_factors: Mapped[list | None] = mapped_column(JsonType)
+    position_sizing: Mapped[dict | None] = mapped_column(JsonType)
+
+    # Provenance
+    generated_by: Mapped[str] = mapped_column(String(50), nullable=False)  # persona name
+    generation_context: Mapped[dict | None] = mapped_column(JsonType)  # signals that triggered
+
+    # Lifecycle
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=ThesisStatus.PROPOSED.value
+    )
+    parent_thesis_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("simulated_theses.id", ondelete="SET NULL")
+    )
+    ticker_ids: Mapped[list | None] = mapped_column(IntArrayType)  # target tickers
+    retired_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    retirement_reason: Mapped[str | None] = mapped_column(Text)
+
+    # Relationships
+    parent_thesis: Mapped[SimulatedThesis | None] = relationship(
+        remote_side="SimulatedThesis.id"
+    )
+    backtest_runs: Mapped[list[BacktestRun]] = relationship(
+        back_populates="thesis", passive_deletes=True
+    )
+    paper_positions: Mapped[list[PaperPosition]] = relationship(
+        back_populates="thesis", passive_deletes=True
+    )
+    simulation_logs: Mapped[list[SimulationLog]] = relationship(
+        back_populates="thesis", passive_deletes=True
+    )
+
+    __table_args__ = (
+        Index("ix_sim_thesis_status", "status"),
+        Index("ix_sim_thesis_generated_by", "generated_by"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 28. BacktestRun — walk-forward backtest results
+# ---------------------------------------------------------------------------
+
+
+class BacktestRun(Base):
+    """Results from a walk-forward backtest of a SimulatedThesis.
+
+    Includes standard quant metrics plus Monte Carlo permutation p-value
+    to separate genuine signal from luck. p < 0.05 means the Sharpe ratio
+    is unlikely to have arisen from random shuffling of daily returns.
+    """
+
+    __tablename__ = "backtest_runs"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    thesis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("simulated_theses.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+
+    # Time window
+    start_date: Mapped[date] = mapped_column(Date, nullable=False)
+    end_date: Mapped[date] = mapped_column(Date, nullable=False)
+
+    # Capital
+    initial_capital: Mapped[float] = mapped_column(Float, nullable=False)
+    final_capital: Mapped[float | None] = mapped_column(Float)
+
+    # Performance metrics
+    sharpe: Mapped[float | None] = mapped_column(Float)
+    sortino: Mapped[float | None] = mapped_column(Float)
+    max_drawdown: Mapped[float | None] = mapped_column(Float)  # negative pct
+    win_rate: Mapped[float | None] = mapped_column(Float)  # 0-1
+    profit_factor: Mapped[float | None] = mapped_column(Float)  # gross_profit / gross_loss
+    expectancy: Mapped[float | None] = mapped_column(Float)  # avg $ per trade
+    total_trades: Mapped[int | None] = mapped_column(Integer)
+
+    # Statistical significance
+    monte_carlo_p_value: Mapped[float | None] = mapped_column(Float)
+
+    # Full config and detailed results
+    config: Mapped[dict | None] = mapped_column(JsonType)  # BacktestConfig as dict
+    results_detail: Mapped[dict | None] = mapped_column(JsonType)  # trade-by-trade
+
+    ran_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    thesis: Mapped[SimulatedThesis] = relationship(back_populates="backtest_runs")
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        Index("ix_backtest_thesis_ran", "thesis_id", "ran_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 29. PaperPortfolio — simulated play-money portfolio
+# ---------------------------------------------------------------------------
+
+
+class PaperPortfolio(Base):
+    """A simulated portfolio for paper-trading thesis-linked positions.
+
+    DISCLAIMER: All capital values are simulated. Zero real money at risk.
+    This exists purely for learning and thesis validation.
+    """
+
+    __tablename__ = "paper_portfolios"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False, unique=True)
+    initial_capital: Mapped[float] = mapped_column(Float, nullable=False, default=100_000.0)
+    current_value: Mapped[float] = mapped_column(Float, nullable=False, default=100_000.0)
+    cash: Mapped[float] = mapped_column(Float, nullable=False, default=100_000.0)
+    total_pnl: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    total_pnl_pct: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    positions: Mapped[list[PaperPosition]] = relationship(
+        back_populates="portfolio", passive_deletes=True
+    )
+
+
+# ---------------------------------------------------------------------------
+# 30. PaperPosition — individual thesis-linked paper trade
+# ---------------------------------------------------------------------------
+
+
+class PaperPosition(Base):
+    """A single paper position within a PaperPortfolio.
+
+    Each position is linked to the SimulatedThesis that generated it,
+    enabling P&L attribution by thesis (which idea is driving returns?).
+    """
+
+    __tablename__ = "paper_positions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    portfolio_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("paper_portfolios.id", ondelete="CASCADE"), nullable=False
+    )
+    thesis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("simulated_theses.id", ondelete="CASCADE"), nullable=False
+    )
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+
+    side: Mapped[str] = mapped_column(String(10), nullable=False)  # PositionSide values
+    entry_date: Mapped[date] = mapped_column(Date, nullable=False)
+    entry_price: Mapped[float] = mapped_column(Float, nullable=False)
+    exit_date: Mapped[date | None] = mapped_column(Date)
+    exit_price: Mapped[float | None] = mapped_column(Float)
+    shares: Mapped[int] = mapped_column(Integer, nullable=False)
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default=PositionStatus.OPEN.value
+    )
+
+    stop_loss: Mapped[float | None] = mapped_column(Float)
+    take_profit: Mapped[float | None] = mapped_column(Float)
+    pnl: Mapped[float | None] = mapped_column(Float)
+    pnl_pct: Mapped[float | None] = mapped_column(Float)
+
+    portfolio: Mapped[PaperPortfolio] = relationship(back_populates="positions")
+    thesis: Mapped[SimulatedThesis] = relationship(back_populates="paper_positions")
+    ticker: Mapped[Ticker] = relationship()
+
+    __table_args__ = (
+        Index("ix_paper_pos_portfolio_status", "portfolio_id", "status"),
+        Index("ix_paper_pos_thesis", "thesis_id"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 31. SimulationLog — immutable decision journal
+# ---------------------------------------------------------------------------
+
+
+class SimulationLog(Base):
+    """Immutable event log for the simulation engine.
+
+    Every thesis generation, backtest, entry, exit, mutation, and retirement
+    is recorded here with full context. This is how the Post-Mortem Priest
+    reconstructs what happened and why — scar tissue as tuition.
+    """
+
+    __tablename__ = "simulation_logs"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    thesis_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("simulated_theses.id", ondelete="SET NULL")
+    )
+    agent_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    event_type: Mapped[str] = mapped_column(String(30), nullable=False)  # SimEventType values
+    event_data: Mapped[dict | None] = mapped_column(JsonType)
+
+    thesis: Mapped[SimulatedThesis | None] = relationship(back_populates="simulation_logs")
+
+    __table_args__ = (
+        Index("ix_sim_log_thesis_created", "thesis_id", "created_at"),
+        Index("ix_sim_log_event_type", "event_type", "created_at"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 32. DeepHedgingModel — trained hedging policy metadata
+# ---------------------------------------------------------------------------
+
+
+class DeepHedgingModel(Base):
+    """Metadata for a trained deep hedging policy (Buehler et al. 2019).
+
+    The actual model weights can be stored as binary blob or referenced
+    by file path. Training config, loss curves, and hedging error are
+    stored here for experiment tracking.
+
+    WHY CVaR loss: Traditional MSE penalizes all hedging errors equally.
+    CVaR focuses on the worst 5% of outcomes — which is what actually matters
+    in risk management. A policy that's great on average but occasionally
+    blows up is worthless.
+    """
+
+    __tablename__ = "deep_hedging_models"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+
+    model_blob: Mapped[bytes | None] = mapped_column(LargeBinary)
+    training_config: Mapped[dict | None] = mapped_column(JsonType)
+    training_loss: Mapped[float | None] = mapped_column(Float)
+    validation_loss: Mapped[float | None] = mapped_column(Float)
+    hedging_error: Mapped[float | None] = mapped_column(Float)  # avg |PnL| on test set
+    epochs: Mapped[int | None] = mapped_column(Integer)
+    trained_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+
+    ticker: Mapped[Ticker] = relationship()
+
+
+# ---------------------------------------------------------------------------
+# 33. AgentMemory — long-term agent learning and self-improvement
+# ---------------------------------------------------------------------------
+
+
+class AgentMemory(Base):
+    """Durable knowledge extracted by agents over time.
+
+    The Post-Mortem Priest reviews SimulationLog entries weekly,
+    extracts durable insights, and stores them here. These memories
+    are injected into agent system prompts to improve future decisions.
+
+    If the user ghosts for 30 days, the system wakes up smarter —
+    not because it ran, but because the memories are already baked in.
+    """
+
+    __tablename__ = "agent_memories"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    agent_name: Mapped[str] = mapped_column(String(50), nullable=False)
+    memory_type: Mapped[str] = mapped_column(String(20), nullable=False)  # MemoryType values
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.5)  # 0-1
+    evidence: Mapped[dict | None] = mapped_column(JsonType)  # supporting data refs
+    last_accessed: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+    access_count: Mapped[int] = mapped_column(Integer, default=0)
+
+    __table_args__ = (
+        Index("ix_agent_memory_agent_type", "agent_name", "memory_type"),
+        Index("ix_agent_memory_confidence", "confidence"),
+    )
