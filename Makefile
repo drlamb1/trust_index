@@ -100,9 +100,7 @@ test-unit:
 # ── Auth ────────────────────────────────────────────────────────────────────────
 
 create-admin:
-	@read -p "Email: " email; \
-	read -sp "Password: " password; echo; \
-	$(PYTHON) cli.py create-admin --email "$$email" --password "$$password"
+	@bash -c 'read -p "Email: " email; read -sp "Password: " password; echo; $(PYTHON) cli.py create-admin --email "$$email" --password "$$password"'
 
 # ── Project ─────────────────────────────────────────────────────────────────────
 
@@ -160,9 +158,7 @@ railway-migrate:
 	railway run .venv/bin/python -m alembic upgrade head
 
 railway-admin:
-	@read -p "Email: " email; \
-	read -sp "Password: " password; echo; \
-	railway run .venv/bin/python cli.py create-admin --email "$$email" --password "$$password"
+	@bash -c 'read -p "Email: " email; read -sp "Password: " password; echo; railway run .venv/bin/python cli.py create-admin --email "$$email" --password "$$password"'
 
 railway-logs:
 	railway logs --service edgefinder
