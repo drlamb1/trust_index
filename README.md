@@ -1,252 +1,299 @@
-# EdgeFinder — Market Intelligence Platform
+# EdgeFinder — Market Intelligence & Simulation Lab
 
-A local-first Python application that ingests SEC filings, tracks news sentiment, detects price/volume anomalies, and delivers a daily briefing for a 500+ ticker universe.
+SEC filings, news sentiment, price anomalies, stochastic vol modeling, and a self-improving thesis simulation engine — all running on play money against live market data.
+
+**Two environments:** local (venv + Docker Redis) and Railway (3 services, fully managed). Pick your mode and stay in it.
+
+---
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Backend | Python 3.11+, FastAPI, asyncio |
-| Database | Neon PostgreSQL (serverless, `asyncpg` + SQLAlchemy 2.0 async) |
-| Task Queue | Celery + Upstash Redis (serverless, SSL `rediss://`) |
-| Frontend | React SPA (Vite + TypeScript + Tailwind + shadcn/ui) — Phase 5 |
-| AI | Claude Sonnet (filing analysis) + Claude Haiku Batches API (bulk sentiment) |
-| CLI | Typer |
+| Backend | Python 3.12, FastAPI, async SQLAlchemy 2.0 |
+| Database | Neon PostgreSQL (serverless) |
+| Queue | Celery + Upstash Redis — 5 queues, 34 tasks |
+| AI | Claude Sonnet (filings, chat, theses) · Haiku (sentiment, routing) |
+| Simulation | Heston stochastic vol, walk-forward backtesting, paper portfolio |
+| Deploy | Docker + Railway (web · worker · simulation-worker) |
 
-## Quick Start
+---
 
-### Prerequisites
-- Python 3.11+
-- [Neon account](https://console.neon.tech) — free PostgreSQL
-- [Upstash account](https://console.upstash.com) — free Redis
-- Optional: Docker (for local Redis during development)
+## Prerequisites
 
-### Installation (Linux / macOS)
+- Python 3.12, Docker, `make`
+- [Neon](https://console.neon.tech) — free PostgreSQL (or any `postgresql+asyncpg://` URL)
+- [Upstash](https://console.upstash.com) — free Redis (or local Docker Redis)
+- API keys: `ANTHROPIC_API_KEY` (required for chat/analysis), others optional
+
+---
+
+## Local Development
+
+Everything goes through `make`. The venv runs the app; Docker runs Redis only.
+
+### First time setup
 
 ```bash
-# 1. Clone the repo
 git clone https://github.com/drlamb1/trust_index.git
 cd trust_index
 
-# 2. Create a virtual environment and install dependencies
 python3 -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 
-# 3. Configure environment
 cp .env.example .env
-# Edit .env — at minimum set DATABASE_URL, REDIS_URL, and EDGAR_USER_AGENT
+# Edit .env — required: DATABASE_URL, REDIS_URL, EDGAR_USER_AGENT
+# For chat/analysis also set: ANTHROPIC_API_KEY
 
-# 4. Initialize the system (runs Alembic migrations, seeds tickers/theses)
-python cli.py init
-
-# 5. Backfill price history (takes ~5-10 min for full S&P 500)
-python cli.py ingest prices --days 365
-
-# 6. Fetch SEC filings + run analysis
-python cli.py ingest filings --type 10-K --limit 5
-
-# 7. Aggregate news
-python cli.py ingest news --days 7
+make init       # starts Redis, runs Alembic migrations, seeds tickers + theses
+make status     # verify DB, Redis, and ticker count look right
 ```
 
-### Installation (WSL / Ubuntu)
-
-WSL requires a few extra steps. **Clone into your WSL home directory** — not `/mnt/c/` — to avoid permission and performance issues.
+### Daily workflow
 
 ```bash
-# 1. Install Python venv support (Ubuntu may not include it)
-sudo apt update && sudo apt install python3-full python3-venv -y
+# Terminal 1 — web dashboard (http://localhost:8050)
+make serve
 
-# 2. Clone into your WSL home directory (NOT /mnt/c/)
-cd ~
-git clone https://github.com/drlamb1/trust_index.git
-cd trust_index
+# Terminal 2 — Celery worker + beat scheduler (all 5 queues)
+make worker
 
-# 3. Create virtual environment and install dependencies
-python3 -m venv .venv
-source .venv/bin/activate
-pip install -r requirements.txt
-
-# 4. Configure environment
-cp .env.example .env
-nano .env  # set DATABASE_URL, REDIS_URL, EDGAR_USER_AGENT at minimum
-
-# 5. Initialize, ingest, and go
-python cli.py init
-python cli.py ingest prices --days 365
-python cli.py ingest filings --type 10-K --limit 5
-python cli.py ingest news --days 7
+# Backfill data (one-time, run while worker is up)
+make ingest-prices        # price history (365 days default)
+make ingest-filings       # SEC 10-K/10-Q filings
+make ingest-news          # RSS + Finnhub + NewsAPI
+make ingest-macro         # FRED economic indicators
+make ingest-insider       # Form 4 insider trades
+make ingest-transcripts   # earnings call transcripts
 ```
 
-> **WSL gotcha:** Do NOT work from `/mnt/c/Users/.../` — it causes `chmod` errors with git,
-> slow I/O, and SQLite locking issues. Always use `~/trust_index`.
+The beat scheduler handles everything on a recurring basis once the worker is running. The manual ingest commands are for initial backfill or forcing a refresh.
 
-### Installation (Windows native)
+### Full Docker stack (optional — mirrors Railway locally)
+
+If you want to test the containerized build before pushing:
 
 ```bash
-# 1. Clone and enter the repo
-git clone https://github.com/drlamb1/trust_index.git
-cd trust_index
-
-# 2. Create virtual environment and install dependencies
-python -m venv .venv
-.venv\Scripts\activate
-pip install -r requirements.txt
-
-# 3. Configure and run (same steps as above)
-copy .env.example .env
-# Edit .env, then:
-python cli.py init
-python cli.py ingest prices --days 365
+make docker-build   # build image
+make docker-up      # web + worker + simulation-worker + Redis
+make docker-down    # tear it all down
 ```
 
-### Running Tests
+---
 
-Tests use SQLite in-memory — no Neon, Redis, or API keys needed.
+## Railway (Deployed)
+
+Three Railway services, all from the same Dockerfile, dispatched by `PROCESS_TYPE` env var.
+
+| Service | `PROCESS_TYPE` | Purpose |
+|---|---|---|
+| `edgefinder` | `web` | FastAPI dashboard + chat API |
+| `edgefinder-worker` | `worker` | Celery worker + beat (all queues) |
+| `edgefinder-simulation` | `simulation-worker` | Dedicated simulation queue |
+
+### First deploy
 
 ```bash
-# Activate venv first (if not already)
-source .venv/bin/activate  # Linux/WSL/macOS
-# .venv\Scripts\activate   # Windows
+# 1. Set env vars on each Railway service (copy from your .env)
+#    All three services need DATABASE_URL, REDIS_URL, ANTHROPIC_API_KEY, etc.
+#    PROCESS_TYPE is set per-service as above
 
-# All tests (327 passing)
-pytest tests/ -v
+# 2. Run migrations against Neon (runs from your local venv via Railway tunnel)
+make railway-migrate
 
-# Unit tests only (fast, no I/O)
-pytest tests/unit/ -v
+# 3. Create an admin user
+make railway-admin
 
-# Skip slow tests
-pytest tests/ -m "not slow" -v
+# 4. Deploy all three services
+make railway-deploy-all-3
 ```
 
-### Start Workers (optional — for scheduled tasks)
-
-Open separate terminals for each worker type:
+### Routine deploys
 
 ```bash
-# Ingestion worker (4 concurrent)
-celery -A scheduler.tasks worker -Q ingestion -c 4 -n ingestion@%h --loglevel=info
+# After code changes — deploy the service(s) that changed
+make railway-deploy              # web only
+make railway-deploy-worker       # worker only
+make railway-deploy-simulation   # simulation worker only
+make railway-deploy-all-3        # all three
 
-# Analysis worker (2 concurrent)
-celery -A scheduler.tasks worker -Q analysis -c 2 -n analysis@%h --loglevel=info
+# After schema changes (new Alembic migration)
+make railway-migrate             # always before deploying new code with model changes
 
-# Alerts worker
-celery -A scheduler.tasks worker -Q alerts -c 2 -n alerts@%h --loglevel=info
-
-# Delivery worker
-celery -A scheduler.tasks worker -Q delivery -c 1 -n delivery@%h --loglevel=info
-
-# Beat scheduler (ONE instance only!)
-celery -A scheduler.tasks beat --loglevel=info
+# Logs
+make railway-logs                # web service
+make railway-logs-worker         # worker service
 ```
 
-### Dashboard (Phase 5)
+### Railway env var notes
+
+- `DATABASE_URL` — Neon `postgresql+asyncpg://...` connection string (same on all 3 services)
+- `REDIS_URL` — Upstash `rediss://...` (SSL, same on all 3)
+- `PROCESS_TYPE` — unique per service (see table above)
+- `PORT` — Railway injects this automatically on the web service; don't set it manually
+- `CORS_ORIGINS` — comma-separated, e.g. `https://edgefinder.up.railway.app`
+
+---
+
+## Make Reference
+
+```
+make help             # full list with descriptions
+
+# Local
+make init             # first-time setup: Redis + migrate + seed
+make migrate          # run Alembic migrations only
+make serve            # web dashboard on :8050
+make worker           # Celery worker + beat (all queues)
+make simulation-worker # simulation queue only (separate terminal)
+make status           # health check: DB, Redis, tickers
+make create-admin     # create admin user interactively
+
+# Data (manual backfill / refresh)
+make ingest-prices    # DAYS=365 (override: make ingest-prices DAYS=90)
+make ingest-filings
+make ingest-news
+make ingest-macro
+make ingest-insider
+make ingest-transcripts
+make ticker-list
+
+# Docker
+make docker-up        # full stack containerized
+make docker-down
+
+# Tests
+make test             # all 368 tests
+make test-unit        # unit tests only (fast, no I/O)
+
+# Railway
+make railway-migrate
+make railway-admin
+make railway-deploy
+make railway-deploy-worker
+make railway-deploy-simulation
+make railway-deploy-all-3
+make railway-logs
+make railway-logs-worker
+```
+
+---
+
+## Tests
+
+SQLite in-memory — no Neon, Redis, or API keys required.
 
 ```bash
-python cli.py serve  # http://localhost:8050
+make test             # 368 tests, ~20s
+make test-unit        # unit tests only, ~15s
 ```
 
-## CLI Reference
+What's covered: price ingestion mocks, SEC EDGAR parsing, news dedup, sentiment scoring, anomaly detection, risk metrics, sector rotation, technical indicators, earnings pipeline, Black-Scholes (put-call parity, Greeks, IV round-trip), Heston (characteristic function, QE Monte Carlo paths, calibration, Feller condition).
 
-```bash
-# System
-python cli.py init                                # Initialize DB and seed data
-python cli.py status                              # Check DB, Redis, and ticker counts
-python cli.py run                                 # Run full daily pipeline
-
-# Tickers
-python cli.py ticker add PLTR --thesis ai_defense --notes "Gov AI contracts"
-python cli.py ticker remove XYZ                   # Soft deactivate (data preserved)
-python cli.py ticker remove XYZ --hard            # Hard delete from DB
-python cli.py ticker list
-python cli.py ticker list --sector Technology --watchlist
-
-# Ingestion — Prices
-python cli.py ingest prices --days 365            # All tickers, 1 year
-python cli.py ingest prices NVDA --days 30        # Single ticker
-
-# Ingestion — SEC Filings (Phase 2)
-python cli.py ingest filings                      # All active tickers with CIK
-python cli.py ingest filings AAPL --type 10-K --limit 5
-python cli.py ingest filings --no-analyze         # Skip Claude analysis
-
-# Ingestion — Insider Trades (Phase 2)
-python cli.py ingest insider-trades               # All watchlist tickers
-python cli.py ingest insider-trades NVDA
-
-# Ingestion — News (Phase 3)
-python cli.py ingest news                         # All tickers (RSS + Finnhub + NewsAPI)
-python cli.py ingest news AAPL --days 7           # Single ticker
-python cli.py ingest news --rss-only              # Skip Finnhub and NewsAPI
-
-# Dashboard
-python cli.py serve
-```
+---
 
 ## Project Structure
 
 ```
-Trust Index/
-├── config/              # Settings (Pydantic), tickers.yaml, theses.yaml
-├── core/                # Database, ORM models (15 models), event bus
-├── ingestion/           # Price data, SEC EDGAR, insider trades, news, earnings
-│   ├── price_data.py    #   yfinance → Alpha Vantage → Polygon fallback
-│   ├── sec_edgar.py     #   EDGAR client, token bucket, CIK cache
-│   ├── insider_trades.py#   Form 4 parser
-│   ├── institutional.py #   13F-HR institutional holdings
-│   ├── news_feed.py     #   RSS + Finnhub + NewsAPI aggregation
-│   └── earnings_calendar.py  # Finnhub earnings calendar (dataclasses)
-├── analysis/            # Technicals, sentiment, anomalies, sector rotation
-│   ├── technicals.py    #   pandas-ta indicators, golden cross, Bollinger
-│   ├── filing_analyzer.py   # 8 regex red-flag patterns + Claude Sonnet
-│   ├── risk_metrics.py  #   Sharpe, max drawdown, beta, VaR
-│   ├── sentiment.py     #   Claude Haiku Batches API sentiment scoring
-│   ├── anomaly_detector.py  # Z-score volume, price drops, gaps, ATR
-│   └── sector_rotation.py   # SPDR ETF relative strength, risk regime
-├── alerts/              # Alert engine, buy-the-dip scorer (Phase 4 stubs)
-├── scheduler/           # Celery tasks + Beat schedule (4 queues)
-├── tests/               # pytest test suite (327 tests)
-│   ├── unit/            #   Pure unit tests
-│   ├── integration/     #   DB integration tests
-│   └── fixtures/        #   Test data fixtures
-├── alembic/             # Database migrations
-├── cli.py               # Typer CLI
-├── daily_briefing.py    # Daily briefing generator (Phase 4)
-├── requirements.txt     # Python dependencies
-├── .env.example         # Environment variable template
-└── docker-compose.yml   # Local Redis for development
+├── api/                 FastAPI app, chat routes, simulation dashboard
+│   ├── app.py             main FastAPI factory
+│   ├── chat_routes.py     SSE streaming chat endpoint
+│   ├── simulation_routes.py  simulation JSON API + SSE feed
+│   └── simulation_page.py    simulation dashboard HTML
+├── chat/                Agent chat system
+│   ├── engine.py          agentic loop (tool-use, streaming, persona routing)
+│   ├── personas.py        8 personas: Analyst, Thesis Genius, PM,
+│   │                        Thesis Lord, Vol Surface Slayer, Heston Calibrator,
+│   │                        Deep Hedge Alchemist, Post-Mortem Priest
+│   ├── tools.py           23+ tool implementations
+│   └── router.py          4-tier routing (prefix → keyword → Haiku → default)
+├── simulation/          Stochastic vol + thesis simulation engine
+│   ├── black_scholes.py   BSM baseline: pricing, Greeks, IV solver
+│   ├── heston.py          Heston model: char function, calibration, QE Monte Carlo
+│   ├── vol_surface.py     IV surface: SVI fitting, Dupire local vol, arb detection
+│   ├── backtester.py      walk-forward backtest + Monte Carlo permutation test
+│   ├── paper_portfolio.py paper position manager, stop-loss, MTM
+│   ├── thesis_generator.py Claude-powered thesis generation from signals
+│   ├── deep_hedging.py    Buehler et al. deep hedging env (CVaR, policy stub)
+│   └── memory.py          agent long-term memory: consolidation, recall, injection
+├── ingestion/           Data source modules
+│   ├── price_data.py      yfinance → Alpha Vantage → Polygon fallback
+│   ├── sec_edgar.py       EDGAR client, token-bucket rate limiting
+│   ├── news_feed.py       RSS + Finnhub + NewsAPI, SHA-256 + rapidfuzz dedup
+│   ├── insider_trades.py  Form 4 parser
+│   ├── institutional.py   13F-HR institutional holdings
+│   ├── earnings_calendar.py Finnhub earnings calendar
+│   ├── transcripts.py     Motley Fool + FMP transcript scraping
+│   ├── macro_data.py      FRED economic indicators
+│   └── options_data.py    Polygon + yfinance options chain
+├── analysis/            Analysis modules
+│   ├── technicals.py      pandas-ta: SMA, EMA, RSI, MACD, Bollinger, ATR
+│   ├── filing_analyzer.py 8 regex red-flags + Claude Sonnet deep analysis
+│   ├── sentiment.py       Claude Haiku Batches API (-1.0 to +1.0)
+│   ├── anomaly_detector.py Z-score volume, price drops, overnight gaps, ATR
+│   ├── risk_metrics.py    Sharpe, Sortino, max drawdown, VaR, beta
+│   ├── sector_rotation.py SPDR ETF relative strength, regime detection
+│   ├── thesis_matcher.py  hybrid scoring: 50% quant criteria + 50% keyword
+│   └── earnings_analyzer.py transcript tone, guidance sentiment, tone-shift
+├── alerts/              Alert rule engine
+│   ├── alert_engine.py    9 composable rules, dedup windows, rate limits
+│   └── buy_the_dip.py     8-dimension dip scoring (price, fundamental, etc.)
+├── scheduler/           Celery tasks + Beat schedule
+│   ├── tasks.py           34 tasks, 5 queues, 31 Beat schedule entries
+│   └── orchestrator.py    pipeline DAGs (EOD chain, weekly maintenance)
+├── core/
+│   ├── models.py          33 SQLAlchemy ORM models
+│   ├── database.py        async engine, NullPool for workers, retry logic
+│   └── security.py        JWT + bcrypt
+├── config/
+│   ├── settings.py        Pydantic BaseSettings (single source of truth)
+│   ├── tickers.yaml       universe definition (S&P 500 + watchlist)
+│   └── theses.yaml        6 investment thesis definitions
+├── tests/               368 tests (SQLite in-memory, no live services)
+├── alembic/             DB migrations
+├── cli.py               Typer CLI
+├── daily_briefing.py    11-section briefing generator
+├── Dockerfile
+├── docker-compose.yml   web + worker + simulation-worker + Redis
+├── entrypoint.sh        PROCESS_TYPE dispatch
+└── Makefile             all dev and deploy commands
 ```
 
-## Build Phases
+---
 
-- **Phase 1 (Done):** Foundation — DB models, price ingestion (yfinance/AV/Polygon), technicals (pandas-ta), CLI
-- **Phase 2 (Done):** Filing Intelligence — SEC EDGAR downloader, 8 regex red-flag patterns + Claude Sonnet analysis, Form 4 insider trades, 13F-HR institutional holdings, risk metrics
-- **Phase 3 (Done):** News & Sentiment — RSS/Finnhub/NewsAPI aggregation, Claude Haiku Batches API sentiment scoring, price/volume anomaly detection, SPDR sector rotation & regime detection, earnings calendar
-- **Phase 4:** Alerts & Thesis — Alert engine, buy-the-dip scorer, thesis matcher, daily briefing
-- **Phase 5:** Dashboard — FastAPI routes, React SPA, SSE real-time alerts
+## Architecture Notes
 
-## Key Design Decisions
+**NullPool on workers** — Celery tasks call `asyncio.run()` per task, creating and closing event loops. A module-level connection pool bound to one event loop becomes invalid in the next. `NullPool` creates a fresh connection per task, avoiding stale-loop errors. Applied to `PROCESS_TYPE` values: `worker`, `simulation-worker`, `beat`.
 
-1. **Neon free tier** — `pool_pre_ping=True` and `pool_recycle=300` handle cold starts; keepalive task every 3 min during market hours
-2. **Upstash Redis** — SSL required (`rediss://`); `broker_use_ssl={"ssl_cert_reqs": ssl.CERT_NONE}`
-3. **Celery + asyncio** — Each task wraps async code with `asyncio.run()`. Never share connection pools across event loops.
-4. **SEC EDGAR rate limit** — Token bucket at 10 req/s (SEC limit). Proper User-Agent with email required.
-5. **Claude API costs** — Sonnet for filing summaries (prompt-cached), Haiku + Batches API for bulk sentiment (50% discount)
-6. **Test isolation** — SQLite in-memory for tests; no Neon, Redis, or API keys needed. `ARRAY` and `JSONB` columns use `.with_variant()` for SQLite compat.
-7. **News deduplication** — SHA-256(url|title) for hard dedup + rapidfuzz (threshold 85%) for soft dedup within batches
+**Beat embedded** — worker service runs `-B` flag (beat embedded). Single instance means no duplicate scheduling risk. Fine for this scale.
+
+**5 Celery queues** — ingestion (4 workers), analysis (2), alerts (2), delivery (1), simulation (2). Each queue has different concurrency tuned to its workload. The simulation queue handles heavy compute (Heston calibration, Monte Carlo paths, backtesting).
+
+**Play money only** — all simulation P&L is simulated. Explicit disclaimers in every UI surface, API response, and log line. `DISCLAIMER: SIMULATED PLAY-MONEY` appears in every SimulationLog entry.
+
+**Claude cost tiers** — Haiku for sentiment, routing, memory consolidation. Sonnet for filing analysis, chat, thesis generation. Prompt caching on long system prompts. Hash-gating to skip re-analysis of unchanged content.
+
+---
 
 ## Environment Variables
 
-See [.env.example](.env.example) for all required and optional variables.
+See [.env.example](.env.example) for the full list.
 
-**Minimum required:**
-- `DATABASE_URL` — Neon PostgreSQL connection string
-- `REDIS_URL` — Upstash Redis URL
-- `EDGAR_USER_AGENT` — SEC requires this (format: `AppName/1.0 email@example.com`)
+**Required:**
+- `DATABASE_URL` — `postgresql+asyncpg://...` (Neon connection string)
+- `REDIS_URL` — `redis://localhost:6379` or `rediss://...` for Upstash
+- `EDGAR_USER_AGENT` — `AppName/1.0 youremail@example.com` (SEC policy)
+- `SECRET_KEY` — generate with `openssl rand -hex 32`
 
-**Optional but recommended:**
-- `ANTHROPIC_API_KEY` — Enables Claude filing analysis and sentiment scoring
-- `FINNHUB_API_KEY` — Enables company news and earnings calendar
-- `NEWS_API_KEY` — Enables NewsAPI aggregation
-- `ALPHA_VANTAGE_API_KEY` — Price data fallback
+**Strongly recommended:**
+- `ANTHROPIC_API_KEY` — enables all Claude-powered features (chat, analysis, theses)
+
+**Optional:**
+- `FINNHUB_API_KEY` — company news + earnings calendar
+- `NEWS_API_KEY` — NewsAPI aggregation
+- `ALPHA_VANTAGE_API_KEY` — price data fallback
+- `POLYGON_API_KEY` — options chain data (needed for vol surface / Heston calibration)
+- `FRED_API_KEY` — macro indicators
+- `FMP_API_KEY` — earnings transcripts
+- SMTP, Slack, Discord, ntfy — alert delivery

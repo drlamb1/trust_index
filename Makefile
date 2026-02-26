@@ -8,11 +8,12 @@ DAYS    ?= 365       # override with: make ingest-prices DAYS=90
         up down logs \
         docker-build docker-up docker-down \
         status init migrate worker serve run \
-        create-admin \
+        create-admin test test-unit \
         ingest-prices ingest-filings ingest-insider ingest-news ingest-macro ingest-transcripts \
         ticker-list \
         railway-deploy railway-deploy-worker railway-deploy-all \
-        railway-migrate railway-admin railway-logs railway-logs-worker
+        railway-migrate railway-admin railway-logs railway-logs-worker \
+        simulation-worker railway-deploy-simulation railway-deploy-all-3
 
 # ── Help ────────────────────────────────────────────────────────────────────────
 
@@ -20,42 +21,45 @@ help:
 	@echo ""
 	@echo "  EdgeFinder — Make Targets"
 	@echo ""
-	@echo "  Docker (local dev)"
-	@echo "    make up                 Start Redis container"
-	@echo "    make down               Stop containers"
-	@echo "    make logs               Tail Redis logs"
-	@echo ""
-	@echo "  Docker (full stack)"
-	@echo "    make docker-build       Build Docker image"
-	@echo "    make docker-up          Start web + worker + Redis"
-	@echo "    make docker-down        Stop all containers"
-	@echo ""
-	@echo "  Project"
-	@echo "    make status             System health (DB + Redis + tickers)"
-	@echo "    make init               Migrate + seed tickers and theses"
+	@echo "  ── Local Dev ─────────────────────────────────────"
+	@echo "    make init               First-time: Redis + migrate + seed"
+	@echo "    make serve              Web dashboard  http://localhost:8050"
+	@echo "    make worker             Celery worker + beat (all queues)"
+	@echo "    make simulation-worker  Simulation queue only"
+	@echo "    make status             Health check: DB, Redis, tickers"
 	@echo "    make migrate            Run Alembic migrations only"
-	@echo "    make worker             Start Celery worker"
-	@echo "    make serve              Launch dashboard on :8050"
-	@echo "    make run                Full daily EOD pipeline"
-	@echo "    make create-admin       Create an admin user"
+	@echo "    make create-admin       Create admin user interactively"
+	@echo "    make run                Trigger full daily EOD pipeline"
 	@echo ""
-	@echo "  Data"
-	@echo "    make ingest-prices      Backfill all tickers  DAYS=$(DAYS)"
-	@echo "    make ingest-filings     Fetch 10-K filings"
-	@echo "    make ingest-insider     Fetch Form 4 insider trades"
-	@echo "    make ingest-news        Aggregate news articles"
-	@echo "    make ingest-macro       Fetch FRED macro indicators"
-	@echo "    make ingest-transcripts Fetch earnings call transcripts"
+	@echo "  ── Tests ─────────────────────────────────────────"
+	@echo "    make test               All 368 tests (~20s, no live services)"
+	@echo "    make test-unit          Unit tests only (~15s)"
+	@echo ""
+	@echo "  ── Data Backfill ─────────────────────────────────"
+	@echo "    make ingest-prices      All tickers  DAYS=$(DAYS)"
+	@echo "    make ingest-filings     SEC 10-K/10-Q filings"
+	@echo "    make ingest-news        RSS + Finnhub + NewsAPI"
+	@echo "    make ingest-macro       FRED macro indicators"
+	@echo "    make ingest-insider     Form 4 insider trades"
+	@echo "    make ingest-transcripts Earnings call transcripts"
 	@echo "    make ticker-list        List active tickers"
 	@echo ""
-	@echo "  Railway (production)"
-	@echo "    make railway-deploy        Deploy web to Railway"
-	@echo "    make railway-deploy-worker Deploy worker to Railway"
-	@echo "    make railway-deploy-all    Deploy web + worker"
-	@echo "    make railway-migrate       Run migrations on Railway"
-	@echo "    make railway-admin         Create admin user on Railway"
-	@echo "    make railway-logs          Tail web service logs"
-	@echo "    make railway-logs-worker   Tail worker service logs"
+	@echo "  ── Docker (full stack) ───────────────────────────"
+	@echo "    make docker-build       Build Docker image"
+	@echo "    make docker-up          web + worker + simulation + Redis"
+	@echo "    make docker-down        Stop all containers"
+	@echo "    make up                 Redis only (for local dev)"
+	@echo "    make down               Stop all"
+	@echo ""
+	@echo "  ── Railway (deployed) ────────────────────────────"
+	@echo "    make railway-migrate            Run migrations on Neon via Railway"
+	@echo "    make railway-admin              Create admin user on Railway"
+	@echo "    make railway-deploy             Deploy: web"
+	@echo "    make railway-deploy-worker      Deploy: worker"
+	@echo "    make railway-deploy-simulation  Deploy: simulation-worker"
+	@echo "    make railway-deploy-all-3       Deploy: all three services"
+	@echo "    make railway-logs               Tail web logs"
+	@echo "    make railway-logs-worker        Tail worker logs"
 	@echo ""
 
 # ── Docker (local dev — Redis only) ──────────────────────────────────────────
@@ -84,6 +88,14 @@ docker-down:
 
 migrate:
 	$(PYTHON) -m alembic upgrade head
+
+# ── Tests ───────────────────────────────────────────────────────────────────────
+
+test:
+	$(PYTHON) -m pytest tests/ -q
+
+test-unit:
+	$(PYTHON) -m pytest tests/unit/ -q
 
 # ── Auth ────────────────────────────────────────────────────────────────────────
 
