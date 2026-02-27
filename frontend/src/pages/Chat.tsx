@@ -10,6 +10,7 @@ import { Send, ChevronDown, ChevronUp } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
 import { streamChat } from '@/lib/sse'
+import { getToken } from '@/lib/api'
 import type { PersonaName } from '@/types/api'
 
 // ─── Tool Result Card ───
@@ -204,7 +205,7 @@ const CONV_STORAGE_KEY = 'edgefinder_conversation_id'
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
-  const { activePersona, setPersona, token } = useAuthStore()
+  const { activePersona, setPersona } = useAuthStore()
   const [messages, setMessages] = useState<ChatEntry[]>([])
   const [input, setInput] = useState(searchParams.get('message') ?? '')
   const [conversationId, setConversationId] = useState<string | null>(null)
@@ -232,6 +233,7 @@ export default function Chat() {
     setIsLoadingHistory(true)
 
     const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const token = getToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     fetch(`/api/chat/conversations/${saved}/messages`, { headers })
