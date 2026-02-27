@@ -1329,16 +1329,43 @@ def task_generate_theses() -> dict:
             return {"skipped": "No Anthropic API key"}
 
         async with AsyncSessionLocal() as session:
+            from sqlalchemy import select
+            from core.models import SimulatedThesis, ThesisStatus
+
             convergences = await detect_signal_convergence(session)
             generated = 0
+            skipped = 0
 
             for conv in convergences[:3]:  # max 3 new theses per cycle
+                # Skip if an active thesis already exists for this ticker
+                existing = await session.execute(
+                    select(SimulatedThesis).where(
+                        SimulatedThesis.ticker_ids.contains([conv["ticker_id"]]),
+                        SimulatedThesis.status.in_([
+                            ThesisStatus.PROPOSED.value,
+                            ThesisStatus.BACKTESTING.value,
+                            ThesisStatus.PAPER_LIVE.value,
+                        ]),
+                    )
+                )
+                if existing.scalar_one_or_none() is not None:
+                    logger.info(
+                        "Skipping thesis generation for ticker_id=%d — active thesis exists",
+                        conv["ticker_id"],
+                    )
+                    skipped += 1
+                    continue
+
                 thesis = await generate_thesis(session, conv, settings.anthropic_api_key)
                 if thesis:
                     generated += 1
 
             await session.commit()
-            return {"convergences_found": len(convergences), "theses_generated": generated}
+            return {
+                "convergences_found": len(convergences),
+                "theses_generated": generated,
+                "skipped_active": skipped,
+            }
 
     try:
         return run_async(_run())
@@ -1357,7 +1384,7 @@ def task_backtest_thesis(self, thesis_id: int, ticker_id: int) -> dict:
         from sqlalchemy import select
 
         from core.database import AsyncSessionLocal
-        from core.models import SimulatedThesis
+        from core.models import SimulatedThesis, SimulationLog, ThesisStatus, SimEventType
         from simulation.backtester import BacktestConfig, run_backtest
 
         async with AsyncSessionLocal() as session:
@@ -1374,16 +1401,56 @@ def task_backtest_thesis(self, thesis_id: int, ticker_id: int) -> dict:
             )
 
             backtest_run = await run_backtest(session, thesis, ticker_id, config)
+
+            # Evaluate outcome and transition thesis status
+            no_data = (
+                isinstance(backtest_run.results_detail, dict)
+                and "error" in backtest_run.results_detail
+            )
+            sharpe = backtest_run.sharpe
+            p_value = backtest_run.monte_carlo_p_value
+
+            if no_data:
+                outcome = "killed"
+                outcome_reason = backtest_run.results_detail.get("error", "No price data")
+                thesis.status = ThesisStatus.KILLED
+            elif sharpe is None or sharpe <= 0:
+                outcome = "killed"
+                outcome_reason = f"Sharpe {sharpe} ≤ 0 — thesis has no edge"
+                thesis.status = ThesisStatus.KILLED
+            else:
+                outcome = "paper_live"
+                outcome_reason = f"Sharpe {sharpe:.3f} > 0 — thesis approved for paper trading"
+                thesis.status = ThesisStatus.PAPER_LIVE
+
+            log_entry = SimulationLog(
+                thesis_id=thesis.id,
+                agent_name="thesis_lord",
+                event_type=SimEventType.BACKTEST_COMPLETE.value,
+                event_data={
+                    "outcome": outcome,
+                    "reason": outcome_reason,
+                    "sharpe": sharpe,
+                    "sortino": backtest_run.sortino,
+                    "max_drawdown": backtest_run.max_drawdown,
+                    "win_rate": backtest_run.win_rate,
+                    "total_trades": backtest_run.total_trades,
+                    "monte_carlo_p_value": p_value,
+                    "disclaimer": "SIMULATED PLAY-MONEY — NOT FINANCIAL ADVICE",
+                },
+            )
+            session.add(log_entry)
             await session.commit()
 
             return {
                 "thesis_id": thesis_id,
                 "ticker_id": ticker_id,
-                "sharpe": backtest_run.sharpe,
+                "outcome": outcome,
+                "sharpe": sharpe,
                 "sortino": backtest_run.sortino,
                 "max_drawdown": backtest_run.max_drawdown,
                 "total_trades": backtest_run.total_trades,
-                "monte_carlo_p_value": backtest_run.monte_carlo_p_value,
+                "monte_carlo_p_value": p_value,
             }
 
     try:

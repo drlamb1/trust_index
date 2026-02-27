@@ -494,17 +494,47 @@ async def _exec_propose_thesis(session: AsyncSession, params: dict) -> dict:
 
 
 async def _exec_trigger_backtest(session: AsyncSession, params: dict) -> dict:
+    from sqlalchemy import select
+    from core.models import SimulatedThesis, SimulationLog, ThesisStatus, SimEventType
     from scheduler.tasks import task_backtest_thesis
+
     thesis_id = params.get("thesis_id")
     ticker_id = params.get("ticker_id")
     if not thesis_id or not ticker_id:
         return {"error": "thesis_id and ticker_id are required"}
-    result = task_backtest_thesis.apply_async(args=[thesis_id, ticker_id])
+
+    result = await session.execute(
+        select(SimulatedThesis).where(SimulatedThesis.id == thesis_id)
+    )
+    thesis = result.scalar_one_or_none()
+    if thesis is None:
+        return {"error": f"Thesis {thesis_id} not found"}
+    if thesis.status not in (ThesisStatus.PROPOSED, ThesisStatus.BACKTESTING):
+        return {"error": f"Thesis is '{thesis.status}' — only PROPOSED theses can be backtested"}
+
+    thesis.status = ThesisStatus.BACKTESTING
+    log_entry = SimulationLog(
+        thesis_id=thesis.id,
+        agent_name="thesis_lord",
+        event_type=SimEventType.BACKTEST_START.value,
+        event_data={
+            "thesis_name": thesis.name,
+            "ticker_id": ticker_id,
+            "triggered_by": "chat_tool",
+            "disclaimer": "SIMULATED PLAY-MONEY — NOT FINANCIAL ADVICE",
+        },
+    )
+    session.add(log_entry)
+    await session.commit()
+
+    celery_result = task_backtest_thesis.apply_async(args=[thesis_id, ticker_id])
     return {
-        "task_id": result.id,
+        "task_id": celery_result.id,
         "status": "queued",
-        "message": f"Backtest enqueued for thesis {thesis_id} on ticker {ticker_id}",
-        "check_status": f"task_id={result.id}",
+        "thesis_name": thesis.name,
+        "message": f"Backtest started for '{thesis.name}' — status → BACKTESTING. Log entry written.",
+        "check_status": f"task_id={celery_result.id}",
+        "disclaimer": "All results are simulated play-money.",
     }
 
 
