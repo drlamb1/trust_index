@@ -433,12 +433,14 @@ async def fetch_sp500_symbols() -> list[dict]:
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
     try:
-        async with httpx.AsyncClient(timeout=30) as client:
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; EdgeFinder/1.0; +https://github.com/drlamb1/trust_index)"}
+        async with httpx.AsyncClient(timeout=30, headers=headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
 
-        # Use pandas to parse the HTML table (much simpler than BeautifulSoup for this)
-        tables = await asyncio.to_thread(pd.read_html, resp.text)
+        # Use pandas to parse the HTML table — wrap in StringIO for pandas >= 2.0
+        import io
+        tables = await asyncio.to_thread(pd.read_html, io.StringIO(resp.text))
         df = tables[0]  # First table is the S&P 500 constituent list
 
         # Column names vary slightly — normalize

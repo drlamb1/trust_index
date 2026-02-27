@@ -2,7 +2,7 @@
 
 ## What This Is
 
-EdgeFinder is a Python market intelligence platform deployed on Railway. It ingests SEC filings, tracks news sentiment, detects price/volume anomalies, scores investment theses, and delivers daily intelligence briefings. It combines quantitative signals with Claude-powered qualitative analysis and exposes everything through an agentic multi-persona chat system. Currently tracking 15 tickers (custom watchlist); designed to scale to the full S&P 500 universe via weekly auto-sync.
+EdgeFinder is a Python market intelligence platform deployed on Railway. It ingests SEC filings, tracks news sentiment, detects price/volume anomalies, scores investment theses, and delivers daily intelligence briefings. It combines quantitative signals with Claude-powered qualitative analysis and exposes everything through an agentic multi-persona chat system. Targeting the full S&P 500 universe as a baseline, with active weekly auto-sync. Currently bootstrapped with a seed watchlist; full constituent sync runs via task_sync_sp500.
 
 It's also a personal learning lab — a system designed to sharpen ML intuition, deepen understanding of market microstructure, and build real muscle with agentic AI patterns, all against live market data.
 
@@ -90,7 +90,7 @@ The data model covers the full lifecycle:
 
 | Domain | Models | Purpose |
 |--------|--------|---------|
-| Universe | Ticker | Custom watchlist (15 active), S&P 500 auto-sync ready, sector, CIK, thesis tags |
+| Universe | Ticker | S&P 500 constituents (auto-synced weekly), sector, CIK, thesis tags |
 | Price | PriceBar, TechnicalSnapshot | OHLCV daily + computed indicators |
 | Filings | Filing, FilingSection, FilingAnalysis, FinancialMetric | SEC docs, parsed sections, Claude analysis, extracted KPIs |
 | News | NewsArticle | Multi-source with sentiment scores |
