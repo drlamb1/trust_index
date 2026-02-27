@@ -200,13 +200,16 @@ interface ChatEntry {
 
 // ─── Main Chat Page ───
 
+const CONV_STORAGE_KEY = 'edgefinder_conversation_id'
+
 export default function Chat() {
   const [searchParams] = useSearchParams()
-  const { activePersona, setPersona } = useAuthStore()
+  const { activePersona, setPersona, token } = useAuthStore()
   const [messages, setMessages] = useState<ChatEntry[]>([])
   const [input, setInput] = useState(searchParams.get('message') ?? '')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
+  const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Auto-scroll on new messages
@@ -219,6 +222,49 @@ export default function Chat() {
     const p = searchParams.get('persona') as PersonaName | null
     if (p && CHAT_PERSONAS.includes(p)) setPersona(p)
   }, [])
+
+  // Restore conversation from localStorage and fetch history
+  useEffect(() => {
+    const saved = localStorage.getItem(CONV_STORAGE_KEY)
+    if (!saved) return
+
+    setConversationId(saved)
+    setIsLoadingHistory(true)
+
+    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    if (token) headers['Authorization'] = `Bearer ${token}`
+
+    fetch(`/api/chat/conversations/${saved}/messages`, { headers })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (!data?.messages?.length) return
+        const restored: ChatEntry[] = []
+        for (const msg of data.messages) {
+          if (msg.role === 'user') {
+            restored.push({
+              id: `u-${msg.id}`,
+              role: 'user',
+              parts: [{ type: 'text', text: msg.content ?? '' }],
+            })
+          } else if (msg.role === 'assistant') {
+            restored.push({
+              id: `a-${msg.id}`,
+              role: 'assistant',
+              parts: [{ type: 'text', text: msg.content ?? '' }],
+              persona: msg.persona as PersonaName ?? undefined,
+            })
+          }
+        }
+        if (restored.length) setMessages(restored)
+      })
+      .catch(() => {})
+      .finally(() => setIsLoadingHistory(false))
+  }, [])
+
+  // Persist conversationId whenever it changes
+  useEffect(() => {
+    if (conversationId) localStorage.setItem(CONV_STORAGE_KEY, conversationId)
+  }, [conversationId])
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
@@ -346,7 +392,12 @@ export default function Chat() {
         className="flex-1 overflow-y-auto"
         style={{ padding: '8px 0', marginBottom: 8 }}
       >
-        {messages.length === 0 && (
+        {isLoadingHistory && (
+          <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)', fontSize: 11 }}>
+            restoring conversation…
+          </div>
+        )}
+        {!isLoadingHistory && messages.length === 0 && (
           <div
             className="flex flex-col items-center justify-center h-full"
             style={{ color: 'var(--color-text-dim)', textAlign: 'center' }}
@@ -360,6 +411,25 @@ export default function Chat() {
             <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12 }}>
               Send a message to start the conversation
             </div>
+          </div>
+        )}
+        {!isLoadingHistory && messages.length > 0 && (
+          <div style={{ textAlign: 'center', paddingBottom: 12 }}>
+            <button
+              onClick={() => {
+                localStorage.removeItem(CONV_STORAGE_KEY)
+                setConversationId(null)
+                setMessages([])
+              }}
+              style={{
+                background: 'transparent', border: '1px solid var(--color-border)',
+                borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: 10,
+                color: 'var(--color-text-dim)',
+              }}
+            >
+              new conversation
+            </button>
           </div>
         )}
         {messages.map(m => (
