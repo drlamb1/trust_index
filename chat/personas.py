@@ -423,7 +423,7 @@ PERSONAS: dict[str, PersonaConfig] = {
     "thesis": PersonaConfig(
         name="thesis",
         display_name="The Thesis Genius",
-        model="claude-sonnet-4-6",
+        model="claude-opus-4-6",
         system_prompt=_THESIS_PROMPT,
         tools=_THESIS_TOOLS,
         color="#d29922",

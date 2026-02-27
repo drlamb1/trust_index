@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
 CONTEXT_WINDOW = 20  # max messages to include in context
-MAX_TOKENS = 4096
+MAX_TOKENS = 8192
 
 
 # ---------------------------------------------------------------------------
