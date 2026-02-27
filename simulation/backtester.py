@@ -361,12 +361,16 @@ def compute_backtest_metrics(
         if std_daily > 0:
             sharpe = (mean_daily - rfr_daily) / std_daily * math.sqrt(252)
 
-        # Sortino
-        downside = daily_returns[daily_returns < 0]
-        if len(downside) > 0:
-            downside_std = float(downside.std())
-            if downside_std > 0:
-                sortino = (mean_daily - rfr_daily) / downside_std * math.sqrt(252)
+        # Sortino — target downside deviation over ALL periods (not conditional std
+        # of negative periods). Correct formula: sqrt(mean of squared negative
+        # excess returns), denominator includes zero-return days. Ref: Sortino &
+        # Price (1994). Using conditional std overestimates the denominator and
+        # systematically underestimates the Sortino ratio.
+        excess_returns = daily_returns - rfr_daily
+        downside_sq = np.minimum(excess_returns, 0.0) ** 2
+        downside_dev = math.sqrt(float(downside_sq.mean()))
+        if downside_dev > 0:
+            sortino = (mean_daily - rfr_daily) / downside_dev * math.sqrt(252)
 
         # Max drawdown
         cumulative = (1 + daily_returns).cumprod()
@@ -401,12 +405,21 @@ def monte_carlo_permutation_test(
     risk_free_rate: float = 0.05,
     seed: int | None = None,
 ) -> float:
-    """Separate skill from luck via Monte Carlo permutation testing.
+    """Test whether the observed Sharpe ratio is distinguishable from chance.
+
+    Uses a stationary block bootstrap (Politis & Romano 1994) rather than
+    a naive permutation. Naive permutation of returns preserves the sample
+    mean and variance exactly — every permuted Sharpe equals the observed
+    Sharpe, giving zero statistical power. Block bootstrap resamples with
+    replacement, so each bootstrap draw has a different mean and variance,
+    producing a non-degenerate null distribution.
 
     ALGORITHM:
-      1. Compute the observed Sharpe ratio from actual daily returns
-      2. Shuffle the daily returns randomly, recompute Sharpe → repeat N times
-      3. p-value = fraction of permuted Sharpes ≥ observed Sharpe
+      1. Compute observed Sharpe from actual daily returns
+      2. Resample overlapping blocks of size `block_size` with replacement
+         to form a bootstrap return series of the same length
+      3. Compute Sharpe on each bootstrap draw — repeat N times
+      4. p-value = fraction of bootstrap Sharpes ≥ observed Sharpe
 
     INTERPRETATION:
       p < 0.01  → very strong evidence of real edge
@@ -414,18 +427,14 @@ def monte_carlo_permutation_test(
       p < 0.10  → suggestive but not conclusive
       p ≥ 0.10  → can't distinguish from luck
 
-    WHY THIS MATTERS:
-      A Sharpe of 1.5 looks great. But if randomly shuffling the SAME returns
-      produces Sharpes of 1.0-2.0 frequently, your strategy's ordering of
-      returns doesn't matter — the edge is in the RETURNS themselves (market beta),
-      not your TIMING.
-
-      This test specifically measures whether the SEQUENCE of your returns
-      (when you're in vs out of the market) adds value beyond random timing.
+    WHY BLOCK BOOTSTRAP:
+      Sampling blocks (not individual days) preserves the serial correlation
+      structure of the return series, so the null distribution respects
+      realistic return dynamics rather than assuming i.i.d. returns.
 
     Args:
-        daily_returns: Series or array of daily returns
-        n_perms: Number of random permutations (10,000 is standard)
+        daily_returns: Series or array of daily portfolio returns
+        n_perms: Number of bootstrap draws (10,000 is standard)
         risk_free_rate: Annual risk-free rate
         seed: Random seed for reproducibility
 
@@ -434,30 +443,34 @@ def monte_carlo_permutation_test(
     """
     rng = np.random.default_rng(seed)
     returns = np.array(daily_returns, dtype=float)
+    n = len(returns)
 
-    if len(returns) < 10:
-        return 1.0  # not enough data
+    if n < 10:
+        return 1.0
 
     rfr_daily = risk_free_rate / 252
     std = np.std(returns, ddof=1)
     if std == 0:
         return 1.0
 
-    # Observed Sharpe
     observed_sharpe = (np.mean(returns) - rfr_daily) / std * np.sqrt(252)
 
-    # Permutation Sharpes
+    # Build overlapping blocks (~2 trading weeks preserves weekly autocorrelation)
+    block_size = 10
+    blocks = [returns[i : i + block_size] for i in range(n - block_size + 1)]
+    n_blocks_needed = math.ceil(n / block_size)
+
     count_gte = 0
     for _ in range(n_perms):
-        perm = rng.permutation(returns)
-        perm_std = np.std(perm, ddof=1)
-        if perm_std > 0:
-            perm_sharpe = (np.mean(perm) - rfr_daily) / perm_std * np.sqrt(252)
-            if perm_sharpe >= observed_sharpe:
+        idxs = rng.integers(0, len(blocks), size=n_blocks_needed)
+        boot = np.concatenate([blocks[i] for i in idxs])[:n]
+        boot_std = np.std(boot, ddof=1)
+        if boot_std > 0:
+            boot_sharpe = (np.mean(boot) - rfr_daily) / boot_std * np.sqrt(252)
+            if boot_sharpe >= observed_sharpe:
                 count_gte += 1
 
-    p_value = count_gte / n_perms
-    return p_value
+    return count_gte / n_perms
 
 
 # ---------------------------------------------------------------------------

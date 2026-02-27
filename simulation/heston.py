@@ -23,7 +23,7 @@ THE HESTON MODEL (1993):
 
 IMPLEMENTATION:
   1. Characteristic function (Albrecher et al. formulation — numerically stable)
-  2. European call pricing via Gauss-Laguerre quadrature
+  2. European call pricing via adaptive Gauss-Kronrod quadrature (scipy.integrate.quad)
   3. Calibration via scipy least_squares (Levenberg-Marquardt)
   4. Monte Carlo path generation via QE scheme (Andersen 2008)
 """
@@ -145,6 +145,13 @@ def heston_characteristic_function(
     # Intermediate calculations
     xi = kappa - rho * sigma_v * 1j * u
     d = np.sqrt(xi**2 + sigma_v2 * (1j * u + u**2))
+
+    # Branch cut guard: ensure Re(d) >= 0 for continuous principal branch.
+    # For extreme parameters (high sigma_v, rho near ±1), numpy's principal
+    # sqrt may return the wrong branch. Negating d preserves |d| and fixes
+    # the branch selection. Ref: Lord & Kahl (2010), §4.
+    if np.real(d) < 0:
+        d = -d
 
     # Careful with branch cut: use the formulation where g < 1
     g = (xi - d) / (xi + d)
