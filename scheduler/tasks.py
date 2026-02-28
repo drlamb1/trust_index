@@ -106,6 +106,11 @@ celery_app.conf.update(
         # Eval / self-learning
         "scheduler.tasks.task_backfill_price_outcomes": {"queue": "analysis"},
         "scheduler.tasks.task_eval_prompt_performance": {"queue": "analysis"},
+        # ML training (consumed by local GPU worker only)
+        "scheduler.tasks.task_train_sentiment_model": {"queue": "ml_training"},
+        "scheduler.tasks.task_train_signal_ranker": {"queue": "ml_training"},
+        "scheduler.tasks.task_train_deep_hedging": {"queue": "ml_training"},
+        "scheduler.tasks.task_refresh_ml_models": {"queue": "simulation"},
     },
     # Default queue for unrouted tasks
     task_default_queue="ingestion",
@@ -333,6 +338,34 @@ celery_app.conf.beat_schedule = {
         "task": "scheduler.tasks.task_eval_prompt_performance",
         "schedule": crontab(minute=30, hour=22, day_of_week=0),
         "options": {"queue": "analysis"},
+    },
+    # ================================================================
+    # ML TRAINING QUEUE — consumed by local GPU worker only
+    # If local worker is offline, these queue harmlessly in Redis.
+    # ================================================================
+    # Sentiment model retrain — weekly Sunday 2 AM UTC
+    "train-sentiment-model": {
+        "task": "scheduler.tasks.task_train_sentiment_model",
+        "schedule": crontab(minute=0, hour=2, day_of_week=0),
+        "options": {"queue": "ml_training"},
+    },
+    # Signal ranker retrain — weekly Sunday 3 AM UTC
+    "train-signal-ranker": {
+        "task": "scheduler.tasks.task_train_signal_ranker",
+        "schedule": crontab(minute=0, hour=3, day_of_week=0),
+        "options": {"queue": "ml_training"},
+    },
+    # Deep hedging retrain — weekly Sunday 4 AM UTC
+    "train-deep-hedging": {
+        "task": "scheduler.tasks.task_train_deep_hedging",
+        "schedule": crontab(minute=0, hour=4, day_of_week=0),
+        "options": {"queue": "ml_training"},
+    },
+    # Model refresh — hourly check for new model versions (Railway workers)
+    "refresh-ml-models": {
+        "task": "scheduler.tasks.task_refresh_ml_models",
+        "schedule": crontab(minute=10, hour="*"),
+        "options": {"queue": "simulation"},
     },
 }
 
@@ -1863,4 +1896,231 @@ def task_eval_prompt_performance() -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_eval_prompt_performance failed: %s", exc)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# ML MODEL TASKS — training (local GPU) + refresh (Railway)
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(name="scheduler.tasks.task_refresh_ml_models")
+def task_refresh_ml_models() -> dict:
+    """Check for new model versions and reload into worker memory cache."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from ml.model_registry import refresh_models
+
+        async with AsyncSessionLocal() as session:
+            refreshed = await refresh_models(session)
+            return {"refreshed": refreshed}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_refresh_ml_models failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_train_sentiment_model")
+def task_train_sentiment_model() -> dict:
+    """Fine-tune FinBERT on EdgeFinder sentiment data. Local GPU only."""
+
+    async def _run():
+        import time
+
+        from core.database import AsyncSessionLocal
+        from core.models import MLModelType, SimulationLog
+        from ml.model_registry import save_model
+        from ml.sentiment.data import extract_sentiment_training_data
+        from ml.sentiment.training import train_sentiment_model
+
+        async with AsyncSessionLocal() as session:
+            df = await extract_sentiment_training_data(session)
+
+            if len(df) < 2000:
+                logger.info(
+                    "Sentiment training skipped: only %d samples (need 2000+)",
+                    len(df),
+                )
+                return {"status": "skipped", "reason": f"Only {len(df)} samples"}
+
+            start = time.time()
+            model_bytes, metrics = train_sentiment_model(df)
+            duration = time.time() - start
+
+            # Quality gate: direction agreement with price moves >= 55%
+            direction_agreement = metrics.get("direction_agreement", 0)
+            activate = direction_agreement >= 0.55
+
+            if not activate:
+                logger.warning(
+                    "Sentiment model failed quality gate: %.1f%% direction agreement",
+                    direction_agreement * 100,
+                )
+
+            await save_model(
+                session,
+                MLModelType.SENTIMENT.value,
+                model_bytes,
+                "sentiment_onnx",
+                training_config=metrics.get("config"),
+                training_metrics=metrics,
+                training_data_stats={"n_samples": len(df)},
+                eval_metrics=metrics,
+                training_duration_seconds=duration,
+                activate=activate,
+            )
+
+            # Log to SimulationLog for SSE feed
+            log_entry = SimulationLog(
+                thesis_id=None,
+                agent_name="ml_trainer",
+                event_type="NOTE",
+                event_data={
+                    "message": f"Sentiment model v{metrics.get('version', '?')} trained",
+                    "activated": activate,
+                    "metrics": metrics,
+                    "duration_seconds": round(duration, 1),
+                },
+            )
+            session.add(log_entry)
+            await session.commit()
+
+            return {
+                "status": "trained" if activate else "saved_inactive",
+                "metrics": metrics,
+                "duration_seconds": round(duration, 1),
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_train_sentiment_model failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_train_signal_ranker")
+def task_train_signal_ranker() -> dict:
+    """Train XGBoost signal ranker on thesis/backtest outcomes. Local only."""
+
+    async def _run():
+        import time
+
+        from core.database import AsyncSessionLocal
+        from core.models import MLModelType, SimulationLog
+        from ml.model_registry import save_model
+        from ml.signal_ranker.data import extract_signal_ranker_training_data
+        from ml.signal_ranker.training import train_signal_ranker
+
+        async with AsyncSessionLocal() as session:
+            df = await extract_signal_ranker_training_data(session)
+
+            if len(df) < 50:
+                logger.info(
+                    "Signal ranker training skipped: only %d samples (need 50+)",
+                    len(df),
+                )
+                return {"status": "skipped", "reason": f"Only {len(df)} samples"}
+
+            start = time.time()
+            model_bytes, metrics = train_signal_ranker(df)
+            duration = time.time() - start
+
+            # Quality gate: AUC > 0.6
+            auc = metrics.get("auc_roc", 0)
+            activate = auc > 0.6
+
+            if not activate:
+                logger.warning("Signal ranker failed quality gate: AUC=%.3f", auc)
+
+            await save_model(
+                session,
+                MLModelType.SIGNAL_RANKER.value,
+                model_bytes,
+                "pickle",
+                training_config=metrics.get("config"),
+                training_metrics=metrics,
+                training_data_stats={"n_samples": len(df)},
+                eval_metrics=metrics,
+                training_duration_seconds=duration,
+                activate=activate,
+            )
+
+            log_entry = SimulationLog(
+                thesis_id=None,
+                agent_name="ml_trainer",
+                event_type="NOTE",
+                event_data={
+                    "message": f"Signal ranker trained (AUC={auc:.3f})",
+                    "activated": activate,
+                    "metrics": metrics,
+                },
+            )
+            session.add(log_entry)
+            await session.commit()
+
+            return {
+                "status": "trained" if activate else "saved_inactive",
+                "metrics": metrics,
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_train_signal_ranker failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_train_deep_hedging")
+def task_train_deep_hedging() -> dict:
+    """Train deep hedging policy network on Heston MC paths. Local only."""
+
+    async def _run():
+        import time
+
+        from core.database import AsyncSessionLocal
+        from core.models import MLModelType, SimulationLog
+        from ml.model_registry import save_model
+        from ml.deep_hedging.training import train_deep_hedging_model
+
+        async with AsyncSessionLocal() as session:
+            start = time.time()
+            model_bytes, metrics = await train_deep_hedging_model(session)
+            duration = time.time() - start
+
+            if model_bytes is None:
+                return {"status": "skipped", "reason": metrics.get("reason", "no data")}
+
+            await save_model(
+                session,
+                MLModelType.DEEP_HEDGING.value,
+                model_bytes,
+                "numpy",
+                training_config=metrics.get("config"),
+                training_metrics=metrics,
+                training_duration_seconds=duration,
+                activate=True,
+            )
+
+            log_entry = SimulationLog(
+                thesis_id=None,
+                agent_name="ml_trainer",
+                event_type="NOTE",
+                event_data={
+                    "message": "Deep hedging policy trained",
+                    "metrics": metrics,
+                    "duration_seconds": round(duration, 1),
+                },
+            )
+            session.add(log_entry)
+            await session.commit()
+
+            return {"status": "trained", "metrics": metrics}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_train_deep_hedging failed: %s", exc)
         raise

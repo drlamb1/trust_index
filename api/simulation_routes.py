@@ -421,3 +421,51 @@ async def api_macro_pulse(user: User = Depends(get_current_user)):
             })
 
         return JSONResponse(cards)
+
+
+# ---------------------------------------------------------------------------
+# ML Model Status
+# ---------------------------------------------------------------------------
+
+
+@router.get("/api/ml/status")
+async def ml_model_status(
+    user: User = Depends(get_current_user),
+):
+    """Return status of all ML models (versions, metrics, training info)."""
+    from sqlalchemy import select
+
+    from core.database import AsyncSessionLocal
+    from core.models import MLModel, MLModelType
+
+    async with AsyncSessionLocal() as session:
+        status = {}
+        for model_type in MLModelType:
+            result = await session.execute(
+                select(MLModel).where(
+                    MLModel.model_type == model_type.value,
+                    MLModel.is_active.is_(True),
+                ).order_by(MLModel.version.desc()).limit(1)
+            )
+            model = result.scalar_one_or_none()
+
+            if model:
+                status[model_type.value] = {
+                    "active": True,
+                    "version": model.version,
+                    "trained_at": model.trained_at.isoformat() if model.trained_at else None,
+                    "size_kb": round(model.model_size_bytes / 1024, 1),
+                    "format": model.model_format,
+                    "model_hash": model.model_hash[:12],
+                    "eval_metrics": model.eval_metrics,
+                    "training_metrics": model.training_metrics,
+                    "training_duration_seconds": model.training_duration_seconds,
+                }
+            else:
+                status[model_type.value] = {
+                    "active": False,
+                    "version": 0,
+                    "message": "No trained model available",
+                }
+
+        return JSONResponse(status)

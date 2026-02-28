@@ -148,6 +148,22 @@ class Settings(BaseSettings):
     )
 
     # -------------------------------------------------------------------------
+    # ML Pipeline — local model inference and training
+    # -------------------------------------------------------------------------
+    use_local_sentiment_model: bool = Field(
+        default=False, description="Use local ONNX sentiment model instead of Haiku API"
+    )
+    signal_ranker_enabled: bool = Field(
+        default=False, description="Use ML signal ranker instead of rule-based threshold"
+    )
+    signal_ranker_min_probability: float = Field(
+        default=0.4, description="Minimum predicted probability for signal ranker to qualify a ticker"
+    )
+    ml_model_refresh_interval_minutes: int = Field(
+        default=60, description="How often workers check for new model versions (minutes)"
+    )
+
+    # -------------------------------------------------------------------------
     # Derived helpers
     # -------------------------------------------------------------------------
     @property

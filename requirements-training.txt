@@ -1,0 +1,26 @@
+# =============================================================================
+# EdgeFinder — ML Training Dependencies (LOCAL ONLY)
+#
+# These packages are used for model training on the local GPU (Predator).
+# They are NOT shipped to Railway. The Railway image only needs the inference
+# deps from requirements.txt (onnxruntime, xgboost, tokenizers).
+#
+# Install: pip install -r requirements-training.txt
+# =============================================================================
+
+-r requirements.txt
+
+# PyTorch (GPU training)
+torch>=2.5.0
+torchvision>=0.20.0
+
+# HuggingFace (FinBERT fine-tuning)
+transformers>=4.46.0
+datasets>=3.0.0
+accelerate>=1.0.0
+
+# ONNX export
+onnx>=1.17.0
+
+# Evaluation
+scikit-learn>=1.5.0

@@ -161,6 +161,27 @@ async def detect_signal_convergence(
     # Sort by signal count (most convergent first)
     convergences.sort(key=lambda x: x["signal_count"], reverse=True)
 
+    # ML re-ranking: if signal ranker is enabled, filter and re-rank by
+    # predicted probability of positive Sharpe
+    from config.settings import settings
+
+    if settings.signal_ranker_enabled and convergences:
+        try:
+            from ml.signal_ranker.inference import rank_convergences
+
+            original_count = len(convergences)
+            convergences = rank_convergences(
+                convergences,
+                min_probability=settings.signal_ranker_min_probability,
+            )
+            logger.info(
+                "Signal ranker: %d/%d convergences passed (min_p=%.2f)",
+                len(convergences), original_count,
+                settings.signal_ranker_min_probability,
+            )
+        except Exception as e:
+            logger.warning("Signal ranker failed, using rule-based ranking: %s", e)
+
     logger.info("Detected %d signal convergences across %d tickers", len(convergences), len(tickers))
     return convergences
 

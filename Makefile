@@ -175,3 +175,17 @@ railway-deploy-all-3:
 	railway up --service edgefinder
 	railway up --service edgefinder-worker
 	railway up --service edgefinder-simulation
+
+# ── ML Training (local GPU only) ────────────────────────────────────────
+
+ml-worker: up
+	$(PYTHON) -m celery -A scheduler.tasks worker -Q ml_training -c 1 --loglevel=info -n ml_training@%h
+
+ml-train-sentiment:
+	$(PYTHON) -m ml.sentiment.training
+
+ml-train-ranker:
+	$(PYTHON) -m ml.signal_ranker.training
+
+ml-train-hedging:
+	$(PYTHON) -m ml.deep_hedging.training

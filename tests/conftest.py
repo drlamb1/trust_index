@@ -332,6 +332,11 @@ def override_settings(monkeypatch):
                 "edgar_rate_limit": 10.0,
                 "has_anthropic": True,
                 "has_finnhub": False,
+                "use_local_sentiment_model": False,
+                "signal_ranker_enabled": False,
+                "signal_ranker_min_probability": 0.4,
+                "ml_model_refresh_interval_minutes": 60,
+                "is_production": False,
             },
         )(),
     )

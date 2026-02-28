@@ -238,6 +238,9 @@ async def save_sentiment_scores(
     now = datetime.now(UTC)
     score_map = {r.article_id: r.score for r in results}
 
+    # Build model name map (per-article, since local model may differ)
+    model_map = {r.article_id: r.model for r in results}
+
     # Bulk-update each article
     updated = 0
     for article_id, score in score_map.items():
@@ -247,7 +250,7 @@ async def save_sentiment_scores(
             .values(
                 sentiment_score=score,
                 sentiment_scored_at=now,
-                sentiment_model=HAIKU_MODEL,
+                sentiment_model=model_map.get(article_id, HAIKU_MODEL),
             )
         )
         await session.execute(stmt)
@@ -332,6 +335,11 @@ async def run_sentiment_pipeline(
 ) -> int:
     """
     Full pipeline: fetch unscored articles → score → save.
+
+    If use_local_sentiment_model is enabled in settings, tries the local
+    ONNX FinBERT model first. Falls back to Haiku API if the model is
+    unavailable or fails.
+
     Returns number of articles scored.
     """
     articles = await fetch_unscored_articles(session, limit=limit)
@@ -341,6 +349,18 @@ async def run_sentiment_pipeline(
 
     logger.info("Scoring %d articles", len(articles))
 
+    # Try local ML model first if enabled
+    from config.settings import settings
+
+    if settings.use_local_sentiment_model:
+        results = _score_with_local_model(articles)
+        if results:
+            saved = await save_sentiment_scores(session, results)
+            logger.info("Saved %d sentiment scores via local model", saved)
+            return saved
+        logger.warning("Local sentiment model unavailable, falling back to Haiku API")
+
+    # Haiku API path (existing behavior)
     if use_batches and len(articles) >= 10:
         results = await score_articles_batch(articles, api_key)
     else:
@@ -349,3 +369,41 @@ async def run_sentiment_pipeline(
     saved = await save_sentiment_scores(session, results)
     logger.info("Saved %d sentiment scores", saved)
     return saved
+
+
+def _score_with_local_model(articles: list[NewsArticle]) -> list[SentimentResult]:
+    """Score articles using the local ONNX FinBERT model.
+
+    Returns empty list if model is not available (triggers fallback).
+    """
+    try:
+        from ml.sentiment.inference import predict_sentiment_batch
+    except ImportError:
+        return []
+
+    titles = []
+    ids = []
+    for a in articles:
+        if a.title:
+            titles.append(a.title[:500])
+            ids.append(a.id)
+
+    if not titles:
+        return []
+
+    scores = predict_sentiment_batch(titles)
+    if not scores or all(s is None for s in scores):
+        return []
+
+    results = []
+    for article_id, score in zip(ids, scores):
+        if score is not None:
+            results.append(
+                SentimentResult(
+                    article_id=article_id,
+                    score=score,
+                    model="finbert-edgefinder",
+                )
+            )
+
+    return results

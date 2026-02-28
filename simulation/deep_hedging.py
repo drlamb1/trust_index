@@ -103,11 +103,13 @@ class DeepHedgingEnv:
     def __post_init__(self):
         self.n_steps = self.price_paths.shape[1] - 1
         self.S0 = float(self.price_paths[0, 0])
+        self._prev_delta = 0.0
 
     def reset(self, path_idx: int = 0) -> HedgingState:
         """Reset environment to start of a new path."""
         self.current_path = path_idx
         self.current_step = 0
+        self._prev_delta = 0.0
         return HedgingState(
             price_ratio=1.0,
             current_delta=0.0,
@@ -132,8 +134,11 @@ class DeepHedgingEnv:
         S_next = float(self.price_paths[path, t + 1])
 
         # Transaction cost from rebalancing
-        delta_change = abs(action_delta - (0.0 if t == 0 else action_delta))
-        cost = self.transaction_cost * abs(delta_change) * S_t
+        # Previous delta is 0.0 at t=0, otherwise tracked from last step's state
+        prev_delta = 0.0 if t == 0 else self._prev_delta
+        delta_change = abs(action_delta - prev_delta)
+        cost = self.transaction_cost * delta_change * S_t
+        self._prev_delta = action_delta
 
         self.current_step += 1
         done = self.current_step >= self.n_steps

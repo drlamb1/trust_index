@@ -1,7 +1,7 @@
 """
 EdgeFinder — SQLAlchemy ORM Models
 
-All 35 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
+All 36 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
 with full type annotations.
 
 PostgreSQL-specific types:
@@ -129,6 +129,17 @@ class NewsTier(int, enum.Enum):
     TIER1 = 2  # Reuters, WSJ, FT, Bloomberg
     TIER2 = 3  # Seeking Alpha, Yahoo Finance, CNBC
     SOCIAL = 4  # Reddit, StockTwits, Twitter
+
+
+# --- ML Pipeline Enums ---
+
+
+class MLModelType(str, enum.Enum):
+    """Types of ML models in the training/inference pipeline."""
+
+    SENTIMENT = "sentiment"
+    SIGNAL_RANKER = "signal_ranker"
+    DEEP_HEDGING = "deep_hedging"
 
 
 # --- Simulation Engine Enums ---
@@ -1391,4 +1402,52 @@ class PromptEval(Base):
 
     __table_args__ = (
         Index("ix_prompt_eval_site_metric", "call_site", "metric_name"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 36. MLModel — trained ML model artifacts with versioned blob storage
+# ---------------------------------------------------------------------------
+
+
+class MLModel(Base):
+    """Registry of trained ML models stored as Postgres TOAST blobs.
+
+    Models are trained locally on a GPU (Predator) via Celery's ml_training
+    queue, then stored here. Railway workers load the active version from
+    the blob, cache it in memory, and use it for inference. Falls back to
+    API/rule-based behavior when no active model exists.
+
+    Expected sizes: ONNX FinBERT ~65MB quantized, XGBoost ~1MB,
+    deep hedging state_dict ~10KB.
+    """
+
+    __tablename__ = "ml_models"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    model_type: Mapped[str] = mapped_column(String(30), nullable=False)  # MLModelType values
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+    # Artifact
+    model_blob: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    model_format: Mapped[str] = mapped_column(String(20), nullable=False)  # onnx, pickle, numpy
+    model_size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    model_hash: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
+
+    # Training provenance
+    training_config: Mapped[dict | None] = mapped_column(JsonType)
+    training_metrics: Mapped[dict | None] = mapped_column(JsonType)
+    training_data_stats: Mapped[dict | None] = mapped_column(JsonType)
+    trained_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=sa.func.now()
+    )
+    training_duration_seconds: Mapped[float | None] = mapped_column(Float)
+
+    # Evaluation on holdout set
+    eval_metrics: Mapped[dict | None] = mapped_column(JsonType)
+
+    __table_args__ = (
+        UniqueConstraint("model_type", "version", name="uq_ml_model_type_version"),
+        Index("ix_ml_model_active", "model_type", "is_active"),
     )

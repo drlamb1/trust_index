@@ -58,3 +58,9 @@ credentials.json
 *.db
 *.sqlite
 *.sqlite3
+
+# ML model artifacts (trained locally, stored in Postgres)
+*.onnx
+*.pt
+*.pkl
+ml/checkpoints/
