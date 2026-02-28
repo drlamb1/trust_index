@@ -103,6 +103,9 @@ celery_app.conf.update(
         "scheduler.tasks.task_check_paper_stops": {"queue": "simulation"},
         "scheduler.tasks.task_thesis_lifecycle_review": {"queue": "simulation"},
         "scheduler.tasks.task_agent_memory_consolidation": {"queue": "simulation"},
+        # Eval / self-learning
+        "scheduler.tasks.task_backfill_price_outcomes": {"queue": "analysis"},
+        "scheduler.tasks.task_eval_prompt_performance": {"queue": "analysis"},
     },
     # Default queue for unrouted tasks
     task_default_queue="ingestion",
@@ -315,6 +318,21 @@ celery_app.conf.beat_schedule = {
         "task": "scheduler.tasks.task_agent_memory_consolidation",
         "schedule": crontab(minute=0, hour=22, day_of_week=0),
         "options": {"queue": "simulation"},
+    },
+    # ================================================================
+    # EVAL / SELF-LEARNING TASKS
+    # ================================================================
+    # Backfill price outcomes on scored news articles — nightly 11:30 PM UTC
+    "backfill-price-outcomes": {
+        "task": "scheduler.tasks.task_backfill_price_outcomes",
+        "schedule": crontab(minute=30, hour=23),
+        "options": {"queue": "analysis"},
+    },
+    # Prompt performance eval — Sundays 10:30 PM UTC (after memory consolidation)
+    "eval-prompt-performance": {
+        "task": "scheduler.tasks.task_eval_prompt_performance",
+        "schedule": crontab(minute=30, hour=22, day_of_week=0),
+        "options": {"queue": "analysis"},
     },
 }
 
@@ -1570,4 +1588,279 @@ def task_agent_memory_consolidation() -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_agent_memory_consolidation failed: %s", exc)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# EVAL / SELF-LEARNING TASKS
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(name="scheduler.tasks.task_backfill_price_outcomes")
+def task_backfill_price_outcomes() -> dict:
+    """Backfill 1d/5d price returns on sentiment-scored news articles.
+
+    For each scored article missing outcome data, looks up the ticker's
+    price_bars to compute the actual return. This closes the feedback loop
+    so we can evaluate whether sentiment scores predicted direction correctly.
+    """
+
+    async def _run():
+        from datetime import timedelta
+
+        from sqlalchemy import and_, select, update
+
+        from core.database import AsyncSessionLocal
+        from core.models import NewsArticle, PriceBar, Ticker
+
+        async with AsyncSessionLocal() as session:
+            # Find articles scored >1 day ago with no outcome data
+            cutoff = datetime.now(timezone.utc) - timedelta(days=1)
+            cutoff_5d = datetime.now(timezone.utc) - timedelta(days=6)
+
+            result = await session.execute(
+                select(NewsArticle).where(
+                    NewsArticle.sentiment_score.is_not(None),
+                    NewsArticle.price_move_1d.is_(None),
+                    NewsArticle.sentiment_scored_at < cutoff,
+                    NewsArticle.published_at.is_not(None),
+                    NewsArticle.ticker_ids.is_not(None),
+                ).limit(500)
+            )
+            articles = result.scalars().all()
+
+            if not articles:
+                return {"backfilled": 0, "message": "No articles need backfill"}
+
+            backfilled = 0
+            for article in articles:
+                # Use first ticker_id from the article
+                ticker_ids = article.ticker_ids
+                if not ticker_ids:
+                    continue
+                ticker_id = ticker_ids[0]
+
+                pub_date = article.published_at.date()
+
+                # Get price on publication day
+                base_price_row = await session.execute(
+                    select(PriceBar.adj_close).where(
+                        PriceBar.ticker_id == ticker_id,
+                        PriceBar.date >= pub_date,
+                    ).order_by(PriceBar.date).limit(1)
+                )
+                base_price = base_price_row.scalar_one_or_none()
+                if not base_price or base_price == 0:
+                    continue
+
+                # 1-day return
+                day1 = pub_date + timedelta(days=1)
+                p1_row = await session.execute(
+                    select(PriceBar.adj_close).where(
+                        PriceBar.ticker_id == ticker_id,
+                        PriceBar.date >= day1,
+                    ).order_by(PriceBar.date).limit(1)
+                )
+                p1 = p1_row.scalar_one_or_none()
+                if p1:
+                    article.price_move_1d = ((p1 - base_price) / base_price) * 100.0
+
+                # 5-day return (only if article is old enough)
+                if article.published_at < cutoff_5d:
+                    day5 = pub_date + timedelta(days=5)
+                    p5_row = await session.execute(
+                        select(PriceBar.adj_close).where(
+                            PriceBar.ticker_id == ticker_id,
+                            PriceBar.date >= day5,
+                        ).order_by(PriceBar.date).limit(1)
+                    )
+                    p5 = p5_row.scalar_one_or_none()
+                    if p5:
+                        article.price_move_5d = ((p5 - base_price) / base_price) * 100.0
+
+                backfilled += 1
+
+            await session.commit()
+            logger.info("Backfilled price outcomes for %d articles", backfilled)
+            return {"backfilled": backfilled}
+
+    try:
+        from datetime import datetime, timezone
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_backfill_price_outcomes failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_eval_prompt_performance")
+def task_eval_prompt_performance() -> dict:
+    """Weekly evaluation of prompt performance against real outcomes.
+
+    Computes:
+    - Sentiment: correlation and directional accuracy vs price_move_1d
+    - Thesis gen: win rate (promoted vs killed) and average Sharpe
+
+    Writes results to prompt_evals table and logs to SimulationLog.
+    """
+
+    async def _run():
+        from datetime import timedelta
+
+        import numpy as np
+        from sqlalchemy import and_, func, select
+
+        from core.database import AsyncSessionLocal
+        from core.models import (
+            BacktestRun,
+            NewsArticle,
+            PromptEval,
+            PromptVersion,
+            SimulatedThesis,
+            SimulationLog,
+            ThesisStatus,
+        )
+
+        now = datetime.now(timezone.utc)
+        week_ago = now - timedelta(days=7)
+        month_ago = now - timedelta(days=30)
+
+        async with AsyncSessionLocal() as session:
+            results = {}
+
+            # --- Sentiment Evaluation ---
+            sent_result = await session.execute(
+                select(NewsArticle.sentiment_score, NewsArticle.price_move_1d).where(
+                    NewsArticle.sentiment_score.is_not(None),
+                    NewsArticle.price_move_1d.is_not(None),
+                    NewsArticle.sentiment_scored_at >= week_ago,
+                )
+            )
+            sent_rows = sent_result.all()
+
+            if len(sent_rows) >= 10:
+                scores = np.array([r[0] for r in sent_rows])
+                moves = np.array([r[1] for r in sent_rows])
+
+                # Correlation
+                correlation = float(np.corrcoef(scores, moves)[0, 1])
+                if np.isnan(correlation):
+                    correlation = 0.0
+
+                # Directional accuracy: did sign match?
+                correct = np.sum(np.sign(scores) == np.sign(moves))
+                accuracy = float(correct / len(scores))
+
+                # Get active prompt version for sentiment
+                pv_result = await session.execute(
+                    select(PromptVersion.id).where(
+                        PromptVersion.call_site == "sentiment",
+                        PromptVersion.is_active.is_(True),
+                    ).limit(1)
+                )
+                pv_id = pv_result.scalar_one_or_none()
+
+                for metric_name, metric_value in [
+                    ("sentiment_correlation", correlation),
+                    ("sentiment_directional_accuracy", accuracy),
+                ]:
+                    eval_record = PromptEval(
+                        call_site="sentiment",
+                        prompt_version_id=pv_id,
+                        metric_name=metric_name,
+                        metric_value=metric_value,
+                        sample_size=len(sent_rows),
+                        eval_period_start=week_ago,
+                        eval_period_end=now,
+                    )
+                    session.add(eval_record)
+
+                results["sentiment"] = {
+                    "correlation": round(correlation, 4),
+                    "directional_accuracy": round(accuracy, 4),
+                    "sample_size": len(sent_rows),
+                }
+            else:
+                results["sentiment"] = {"skipped": "insufficient data", "sample_size": len(sent_rows)}
+
+            # --- Thesis Generation Evaluation ---
+            thesis_result = await session.execute(
+                select(SimulatedThesis).where(
+                    SimulatedThesis.created_at >= month_ago,
+                    SimulatedThesis.status.in_([
+                        ThesisStatus.PAPER_LIVE.value,
+                        ThesisStatus.KILLED.value,
+                        ThesisStatus.RETIRED.value,
+                    ]),
+                )
+            )
+            theses = thesis_result.scalars().all()
+
+            if theses:
+                total = len(theses)
+                promoted = sum(1 for t in theses if t.status == ThesisStatus.PAPER_LIVE.value)
+                win_rate = promoted / total
+
+                # Average Sharpe from backtests
+                bt_result = await session.execute(
+                    select(BacktestRun.sharpe).where(
+                        BacktestRun.created_at >= month_ago,
+                        BacktestRun.sharpe.is_not(None),
+                    )
+                )
+                sharpes = [r[0] for r in bt_result.all()]
+                avg_sharpe = float(np.mean(sharpes)) if sharpes else 0.0
+
+                pv_result = await session.execute(
+                    select(PromptVersion.id).where(
+                        PromptVersion.call_site == "thesis_gen",
+                        PromptVersion.is_active.is_(True),
+                    ).limit(1)
+                )
+                pv_id = pv_result.scalar_one_or_none()
+
+                for metric_name, metric_value in [
+                    ("thesis_win_rate", win_rate),
+                    ("thesis_avg_sharpe", avg_sharpe),
+                ]:
+                    eval_record = PromptEval(
+                        call_site="thesis_gen",
+                        prompt_version_id=pv_id,
+                        metric_name=metric_name,
+                        metric_value=metric_value,
+                        sample_size=total if metric_name == "thesis_win_rate" else len(sharpes),
+                        eval_period_start=month_ago,
+                        eval_period_end=now,
+                    )
+                    session.add(eval_record)
+
+                results["thesis_gen"] = {
+                    "win_rate": round(win_rate, 4),
+                    "avg_sharpe": round(avg_sharpe, 4),
+                    "theses_evaluated": total,
+                    "backtests_evaluated": len(sharpes),
+                }
+            else:
+                results["thesis_gen"] = {"skipped": "no completed theses in period"}
+
+            # Log summary to SimulationLog for SSE feed
+            log_entry = SimulationLog(
+                thesis_id=None,
+                agent_name="eval_engine",
+                event_type="NOTE",
+                event_data={
+                    "message": "Weekly prompt performance eval complete",
+                    "results": results,
+                },
+            )
+            session.add(log_entry)
+
+            await session.commit()
+            logger.info("Prompt performance eval complete: %s", results)
+            return results
+
+    try:
+        from datetime import datetime, timezone
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_eval_prompt_performance failed: %s", exc)
         raise

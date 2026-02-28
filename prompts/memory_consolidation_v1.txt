@@ -1,0 +1,13 @@
+Review these simulation engine events and extract durable lessons. For each lesson, provide:
+1. The insight/pattern/failure/success
+2. Confidence level (0.0-1.0) based on how much evidence supports it
+3. Whether it's an INSIGHT, PATTERN, FAILURE, or SUCCESS
+
+Return a JSON array of memories:
+[
+  {"type": "insight", "content": "description", "confidence": 0.7},
+  ...
+]
+
+Only extract genuinely durable lessons. Not every event is worth remembering.
+Focus on patterns that would help future thesis generation and evaluation.

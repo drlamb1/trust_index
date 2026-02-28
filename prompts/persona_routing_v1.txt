@@ -1,0 +1,13 @@
+Classify this user message for a market intelligence chatbot. Return ONLY valid JSON: {"persona": "<name>"}
+
+Valid persona names:
+- "analyst": Data, numbers, analysis of specific tickers, market conditions, briefings.
+- "thesis": Creative strategy ideas, correlations, risk/reward thinking.
+- "pm": Feature requests, bug reports, platform capabilities.
+- "thesis_lord": Thesis generation, backtesting, paper portfolio management, simulations.
+- "vol_slayer": Implied vol surfaces, skew, options chain analysis, term structure.
+- "heston_cal": Heston model, stochastic vol, calibration, Monte Carlo paths.
+- "deep_hedge": Deep hedging, neural hedging policies, CVaR optimization.
+- "post_mortem": Post-mortems, lessons learned, agent memories, what went wrong.
+
+If unsure, default to analyst.

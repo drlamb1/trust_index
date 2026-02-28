@@ -1,0 +1,27 @@
+Analyze these converging market signals and generate a structured investment thesis.
+
+Generate a thesis in this EXACT JSON format:
+{
+    "name": "Short memorable name (3-5 words)",
+    "thesis_text": "2-3 paragraph narrative explaining the opportunity",
+    "entry_criteria": {
+        "price_condition": "description of price level/pattern for entry",
+        "confirmation_signals": ["list", "of", "required", "confirmations"]
+    },
+    "exit_criteria": {
+        "profit_target_pct": 15.0,
+        "stop_loss_pct": 8.0,
+        "time_exit_days": 90,
+        "invalidation_triggers": ["list of conditions that kill the thesis"]
+    },
+    "time_horizon_days": 90,
+    "expected_catalysts": ["upcoming events that could trigger the thesis"],
+    "risk_factors": ["what could go wrong"],
+    "position_sizing": {
+        "max_portfolio_pct": 5.0,
+        "conviction_level": "high/medium/low"
+    }
+}
+
+IMPORTANT: This is for a SIMULATED learning lab. Be intellectually honest about risks.
+Focus on what the signal convergence genuinely suggests, not what sounds exciting.

@@ -186,7 +186,15 @@ async def generate_thesis(
     try:
         import anthropic
 
+        from simulation.memory import inject_memories_into_prompt
+
         client = anthropic.AsyncAnthropic(api_key=api_key)
+
+        # Inject relevant agent memories from past thesis outcomes
+        memory_context = f"{convergence['ticker_symbol']} {convergence['sector']} thesis generation"
+        memory_block = await inject_memories_into_prompt(
+            session, "thesis_lord", context=memory_context,
+        )
 
         prompt = f"""Analyze these converging market signals for {convergence['ticker_symbol']} ({convergence['ticker_name']})
 in the {convergence['sector']} sector and generate a structured investment thesis.
@@ -220,11 +228,21 @@ Generate a thesis in this EXACT JSON format:
 IMPORTANT: This is for a SIMULATED learning lab. Be intellectually honest about risks.
 Focus on what the signal convergence genuinely suggests, not what sounds exciting."""
 
-        response = await client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=2000,
-            messages=[{"role": "user", "content": prompt}],
-        )
+        # Build messages — use system prompt with memories if available
+        messages = [{"role": "user", "content": prompt}]
+        api_kwargs = {
+            "model": "claude-sonnet-4-6",
+            "max_tokens": 2000,
+            "messages": messages,
+        }
+        if memory_block:
+            api_kwargs["system"] = memory_block
+            logger.info(
+                "Injected %d chars of agent memories into thesis generation for %s",
+                len(memory_block), convergence['ticker_symbol'],
+            )
+
+        response = await client.messages.create(**api_kwargs)
 
         raw = response.content[0].text
         # Extract JSON from response (handle markdown code blocks)

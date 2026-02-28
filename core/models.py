@@ -1,7 +1,7 @@
 """
 EdgeFinder — SQLAlchemy ORM Models
 
-All 33 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
+All 35 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
 with full type annotations.
 
 PostgreSQL-specific types:
@@ -476,6 +476,10 @@ class NewsArticle(Base):
     sentiment_score: Mapped[float | None] = mapped_column(Float)  # -1.0 to +1.0
     sentiment_scored_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     sentiment_model: Mapped[str | None] = mapped_column(String(50))
+
+    # Outcome linking — backfilled nightly from price_bars
+    price_move_1d: Mapped[float | None] = mapped_column(Float)  # 1-day % return after article
+    price_move_5d: Mapped[float | None] = mapped_column(Float)  # 5-day % return after article
 
     __table_args__ = (Index("ix_news_published_tier", "published_at", "source_tier"),)
 
@@ -1330,4 +1334,61 @@ class AgentMemory(Base):
     __table_args__ = (
         Index("ix_agent_memory_agent_type", "agent_name", "memory_type"),
         Index("ix_agent_memory_confidence", "confidence"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 34. PromptVersion — versioned system prompts for eval tracking
+# ---------------------------------------------------------------------------
+
+
+class PromptVersion(Base):
+    """Versioned registry of system prompts used across LLM call sites.
+
+    Tracks which prompt text was active when each LLM call was made,
+    enabling A/B testing and performance evaluation of prompt changes.
+    """
+
+    __tablename__ = "prompt_versions"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_site: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g. "sentiment", "thesis_gen"
+    version: Mapped[int] = mapped_column(Integer, nullable=False)
+    prompt_sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    prompt_text: Mapped[str] = mapped_column(Text, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
+    __table_args__ = (
+        UniqueConstraint("call_site", "version", name="uq_prompt_version_site_version"),
+        Index("ix_prompt_version_active", "call_site", "is_active"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 35. PromptEval — performance metrics per prompt version
+# ---------------------------------------------------------------------------
+
+
+class PromptEval(Base):
+    """Stores computed performance metrics for each prompt version.
+
+    The weekly eval task correlates LLM outputs against real-world
+    outcomes (price moves, thesis Sharpe) and writes results here.
+    """
+
+    __tablename__ = "prompt_evals"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    call_site: Mapped[str] = mapped_column(String(50), nullable=False)
+    prompt_version_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("prompt_versions.id", ondelete="SET NULL")
+    )
+    metric_name: Mapped[str] = mapped_column(String(50), nullable=False)  # e.g. "sentiment_correlation"
+    metric_value: Mapped[float] = mapped_column(Float, nullable=False)
+    sample_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    eval_period_start: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    eval_period_end: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+
+    __table_args__ = (
+        Index("ix_prompt_eval_site_metric", "call_site", "metric_name"),
     )
