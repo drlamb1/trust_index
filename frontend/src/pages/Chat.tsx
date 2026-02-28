@@ -201,7 +201,7 @@ interface ChatEntry {
 
 // ─── Main Chat Page ───
 
-const CONV_STORAGE_KEY = 'edgefinder_conversation_id'
+const convKey = (persona: PersonaName) => `edgefinder_conv_${persona}`
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
@@ -224,22 +224,26 @@ export default function Chat() {
     if (p && CHAT_PERSONAS.includes(p)) setPersona(p)
   }, [])
 
-  // Restore conversation from localStorage and fetch history
+  // Restore conversation for active persona from localStorage
   useEffect(() => {
-    const saved = localStorage.getItem(CONV_STORAGE_KEY)
-    if (!saved) return
+    const saved = localStorage.getItem(convKey(activePersona))
+    if (!saved) {
+      setConversationId(null)
+      setMessages([])
+      return
+    }
 
     setConversationId(saved)
     setIsLoadingHistory(true)
 
-    const headers: Record<string, string> = { 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {}
     const token = getToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
 
     fetch(`/api/chat/conversations/${saved}/messages`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (!data?.messages?.length) return
+        if (!data?.messages?.length) { setMessages([]); return }
         const restored: ChatEntry[] = []
         for (const msg of data.messages) {
           if (msg.role === 'user') {
@@ -253,20 +257,20 @@ export default function Chat() {
               id: `a-${msg.id}`,
               role: 'assistant',
               parts: [{ type: 'text', text: msg.content ?? '' }],
-              persona: msg.persona as PersonaName ?? undefined,
+              persona: (msg.persona as PersonaName) ?? undefined,
             })
           }
         }
-        if (restored.length) setMessages(restored)
+        setMessages(restored)
       })
-      .catch(() => {})
+      .catch(() => { setMessages([]) })
       .finally(() => setIsLoadingHistory(false))
-  }, [])
+  }, [activePersona])
 
-  // Persist conversationId whenever it changes
+  // Persist conversationId per persona whenever it changes
   useEffect(() => {
-    if (conversationId) localStorage.setItem(CONV_STORAGE_KEY, conversationId)
-  }, [conversationId])
+    if (conversationId) localStorage.setItem(convKey(activePersona), conversationId)
+  }, [conversationId, activePersona])
 
   const sendMessage = useCallback(async () => {
     const text = input.trim()
@@ -310,11 +314,18 @@ export default function Chat() {
 
           case 'token':
             currentText += event.data.text
-            setMessages(prev => prev.map(m =>
-              m.id === assistantId
-                ? { ...m, parts: [{ type: 'text', text: currentText }] }
-                : m
-            ))
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              // Update only the last text part — preserves earlier thinking text and tool cards
+              const parts = [...m.parts]
+              for (let i = parts.length - 1; i >= 0; i--) {
+                if (parts[i].type === 'text') {
+                  parts[i] = { type: 'text', text: currentText }
+                  break
+                }
+              }
+              return { ...m, parts }
+            }))
             break
 
           case 'tool_result':
@@ -419,7 +430,7 @@ export default function Chat() {
           <div style={{ textAlign: 'center', paddingBottom: 12 }}>
             <button
               onClick={() => {
-                localStorage.removeItem(CONV_STORAGE_KEY)
+                localStorage.removeItem(convKey(activePersona))
                 setConversationId(null)
                 setMessages([])
               }}

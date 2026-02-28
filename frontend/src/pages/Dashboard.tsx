@@ -103,7 +103,7 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
           </button>
         )}
         <Link
-          to="/chat?persona=thesis_lord"
+          to={`/chat?persona=thesis_lord&message=${encodeURIComponent(`What's the current status of thesis "${thesis.name}" (ID ${thesis.id})? Give me the full picture.`)}`}
           style={{
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             background: 'hsl(228 15% 14%)', border: '1px solid var(--color-border)',
