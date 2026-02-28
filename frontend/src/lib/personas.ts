@@ -1,6 +1,12 @@
 import type { PersonaInfo, PersonaName } from '@/types/api'
 
 export const PERSONAS: Record<PersonaName, PersonaInfo> = {
+  edge: {
+    name: 'edge',
+    display_name: 'The Edger',
+    color: '#ff4f81',
+    icon: 'E',
+  },
   analyst: {
     name: 'analyst',
     display_name: 'The Analyst',
@@ -51,7 +57,7 @@ export const PERSONAS: Record<PersonaName, PersonaInfo> = {
   },
 }
 
-export const CHAT_PERSONAS: PersonaName[] = ['analyst', 'thesis', 'pm', 'thesis_lord', 'vol_slayer', 'heston_cal', 'deep_hedge', 'post_mortem']
+export const CHAT_PERSONAS: PersonaName[] = ['edge', 'analyst', 'thesis', 'pm', 'thesis_lord', 'vol_slayer', 'heston_cal', 'deep_hedge', 'post_mortem']
 
 // Maps agent names from simulation log to display colors
 export function agentColor(agentName: string): string {

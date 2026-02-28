@@ -230,7 +230,7 @@ export interface SimulationStats {
 
 // ─── Chat ───
 
-export type PersonaName = 'analyst' | 'thesis' | 'pm' | 'thesis_lord' | 'vol_slayer' | 'heston_cal' | 'deep_hedge' | 'post_mortem'
+export type PersonaName = 'edge' | 'analyst' | 'thesis' | 'pm' | 'thesis_lord' | 'vol_slayer' | 'heston_cal' | 'deep_hedge' | 'post_mortem'
 
 export interface PersonaInfo {
   name: PersonaName
@@ -264,7 +264,8 @@ export type ChatSSEEvent =
   | { event: 'token'; data: { text: string } }
   | { event: 'tool_start'; data: { name: string; input: Record<string, unknown> } }
   | { event: 'tool_result'; data: { name: string; result: Record<string, unknown> } }
-  | { event: 'handoff'; data: { target: string; reason: string } }
+  | { event: 'handoff'; data: { target_persona: string; reason: string } }
+  | { event: 'round_start'; data: { round: number } }
   | { event: 'done'; data: { input_tokens: number; output_tokens: number; cache_read_tokens: number } }
   | { event: 'error'; data: { message: string } }
 

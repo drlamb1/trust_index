@@ -7,8 +7,8 @@ Four-tier routing (cheapest first):
   3. Haiku classifier (fallback, ~$0.001/call)
   4. Default: continue with conversation's active persona
 
-Supports 8 personas: analyst, thesis, pm, thesis_lord, vol_slayer,
-heston_cal, deep_hedge, post_mortem.
+Supports 9 personas: edge (default), analyst, thesis, pm, thesis_lord,
+vol_slayer, heston_cal, deep_hedge, post_mortem.
 """
 
 from __future__ import annotations
@@ -24,7 +24,7 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 _PREFIX_RE = re.compile(
-    r"^[@/](analyst|thesis|pm|thesis_lord|vol_slayer|heston_cal|deep_hedge|post_mortem)\b\s*",
+    r"^[@/](edge|analyst|thesis|pm|thesis_lord|vol_slayer|heston_cal|deep_hedge|post_mortem)\b\s*",
     re.IGNORECASE,
 )
 
@@ -129,7 +129,8 @@ _ROUTER_SYSTEM = (
     "Classify this user message for a market intelligence chatbot. "
     'Return ONLY valid JSON: {"persona": "<name>"}\n\n'
     'Valid persona names:\n'
-    '- "analyst": Data, numbers, analysis of specific tickers, market conditions, briefings.\n'
+    '- "edge": General questions, overviews, "what\'s happening", learning, explanation requests, anything ambiguous.\n'
+    '- "analyst": Deep-dive data analysis of specific tickers, filings, technicals, sentiment, briefings.\n'
     '- "thesis": Creative strategy ideas, correlations, risk/reward thinking.\n'
     '- "pm": Feature requests, bug reports, platform capabilities.\n'
     '- "thesis_lord": Thesis generation, backtesting, paper portfolio management, simulations.\n'
@@ -137,7 +138,7 @@ _ROUTER_SYSTEM = (
     '- "heston_cal": Heston model, stochastic vol, calibration, Monte Carlo paths.\n'
     '- "deep_hedge": Deep hedging, neural hedging policies, CVaR optimization.\n'
     '- "post_mortem": Post-mortems, lessons learned, agent memories, what went wrong.\n\n'
-    "If unsure, default to analyst."
+    "If unsure, default to edge."
 )
 
 
@@ -155,13 +156,13 @@ async def _classify_with_haiku(text: str, api_key: str) -> str:
         )
         raw = response.content[0].text.strip()
         data = json.loads(raw)
-        persona = data.get("persona", "analyst")
-        valid = {"analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
+        persona = data.get("persona", "edge")
+        valid = {"edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
         if persona in valid:
             return persona
     except Exception as exc:
         logger.warning("Haiku routing failed: %s", exc)
-    return "analyst"
+    return "edge"
 
 
 # ---------------------------------------------------------------------------
@@ -198,5 +199,5 @@ async def route_message(
         logger.debug("Routed via Haiku: %s", persona)
         return persona, text
 
-    # Tier 4: Default to current persona or analyst
-    return current_persona or "analyst", text
+    # Tier 4: Default to current persona or edge
+    return current_persona or "edge", text

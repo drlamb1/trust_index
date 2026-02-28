@@ -1086,6 +1086,118 @@ async def _exec_search_decision_log(session: AsyncSession, params: dict) -> dict
 
 
 # ---------------------------------------------------------------------------
+# Learning Layer (Edge-only)
+# ---------------------------------------------------------------------------
+
+_CONCEPT_LIBRARY = [
+    ("sortino_ratio", "Sortino Ratio", "Like Sharpe but only penalizes downside vol — upside surprise is fine", "beginner"),
+    ("sharpe_ratio", "Sharpe Ratio", "Risk-adjusted return: excess return per unit of total volatility", "beginner"),
+    ("rsi", "RSI (Relative Strength Index)", "Momentum oscillator measuring speed of price changes on a 0-100 scale", "beginner"),
+    ("sma_crossover", "SMA Golden/Death Cross", "Short-term moving average crosses long-term — trend change signal", "beginner"),
+    ("implied_vol", "Implied Volatility", "The market's forecast of future price movement, extracted from option prices", "intermediate"),
+    ("vol_skew", "Volatility Skew", "Why OTM puts cost more than calls — the market's crash insurance premium", "intermediate"),
+    ("monte_carlo", "Monte Carlo Simulation", "Running thousands of random futures to estimate probability distributions", "intermediate"),
+    ("mean_reversion", "Mean Reversion", "Prices tend to return to their average — the tricky part is knowing which average", "intermediate"),
+    ("heston_model", "Heston Model", "Letting volatility itself be random — because vol clusters and has its own dynamics", "advanced"),
+    ("p_value", "Statistical Significance (p-values)", "How likely your backtest result happened by random chance", "intermediate"),
+    ("max_drawdown", "Maximum Drawdown", "Worst peak-to-trough drop — the pain metric that Sharpe ignores", "beginner"),
+    ("position_sizing", "Position Sizing", "How much capital per thesis — the unsexy skill that keeps you alive", "beginner"),
+    ("bollinger_bands", "Bollinger Bands", "Price channels based on std dev — tells you if price is unusually stretched", "beginner"),
+    ("term_structure", "Vol Term Structure", "How implied vol changes across expiry dates — flat, contango, or backwardation", "intermediate"),
+    ("leverage_effect", "The Leverage Effect", "Why vol goes up when stocks go down — it's about debt ratios, not psychology", "intermediate"),
+    ("feller_condition", "Feller Condition", "When can vol touch zero in Heston? This constraint shapes the entire surface", "advanced"),
+    ("cvar", "CVaR (Conditional Value at Risk)", "Average loss in the worst X% of scenarios — VaR's smarter sibling", "intermediate"),
+    ("signal_convergence", "Signal Convergence", "When multiple independent signals point the same direction — triangulating a position", "beginner"),
+    ("earnings_surprise", "Earnings Surprise", "Gap between expected and actual earnings — the reaction matters more than the number", "beginner"),
+    ("insider_buying", "Insider Buying Signals", "Officers buying their own stock with real money — the strongest non-public signal", "beginner"),
+]
+
+
+async def _exec_get_learning_nugget(session: AsyncSession, params: dict) -> dict:
+    """Find an interesting, untaught concept to teach the user."""
+    from sqlalchemy import desc, func, select
+    from core.models import AgentMemory, BacktestRun, SimulatedThesis
+
+    # 1. Get already-taught concept IDs
+    taught_result = await session.execute(
+        select(AgentMemory.content)
+        .where(AgentMemory.agent_name == "edge")
+        .where(AgentMemory.memory_type == "lesson_taught")
+        .order_by(desc(AgentMemory.created_at))
+        .limit(50)
+    )
+    taught_ids = {r[0] for r in taught_result.all()}
+
+    # 2. Filter out already-taught concepts
+    untaught = [c for c in _CONCEPT_LIBRARY if c[0] not in taught_ids]
+    if not untaught:
+        untaught = list(_CONCEPT_LIBRARY)  # cycle back through
+
+    # 3. Gather grounding data from recent platform activity
+    grounding = {}
+
+    backtest_result = await session.execute(
+        select(BacktestRun)
+        .where(BacktestRun.sharpe.isnot(None))
+        .order_by(desc(BacktestRun.created_at))
+        .limit(1)
+    )
+    bt = backtest_result.scalar_one_or_none()
+    if bt:
+        grounding["latest_backtest"] = _json_safe({
+            "thesis_id": bt.thesis_id,
+            "sharpe": bt.sharpe,
+            "sortino": bt.sortino,
+            "max_drawdown": bt.max_drawdown,
+            "p_value": bt.monte_carlo_p_value,
+        })
+
+    thesis_count = await session.execute(
+        select(func.count()).select_from(SimulatedThesis)
+        .where(SimulatedThesis.status == "paper_live")
+    )
+    grounding["active_theses"] = thesis_count.scalar() or 0
+
+    # 4. Pick concept — prefer ones that match available grounding data
+    selected = untaught[0]
+    if grounding.get("latest_backtest"):
+        backtest_concepts = {"sortino_ratio", "sharpe_ratio", "max_drawdown", "p_value"}
+        for c in untaught:
+            if c[0] in backtest_concepts:
+                selected = c
+                break
+
+    return {
+        "concept_id": selected[0],
+        "concept_name": selected[1],
+        "one_liner": selected[2],
+        "difficulty": selected[3],
+        "grounding_data": grounding,
+        "already_taught_count": len(taught_ids),
+        "concepts_remaining": len(untaught),
+    }
+
+
+async def _exec_record_lesson_taught(session: AsyncSession, params: dict) -> dict:
+    """Record that a concept was taught to the user, preventing repeats."""
+    from core.models import AgentMemory
+    concept_id = params.get("concept_id", "")
+    summary = params.get("summary", "")
+    if not concept_id:
+        return {"error": "concept_id required"}
+    memory = AgentMemory(
+        agent_name="edge",
+        memory_type="lesson_taught",
+        content=concept_id,
+        confidence=1.0,
+        evidence={"summary": summary},
+    )
+    session.add(memory)
+    await session.flush()
+    return {"recorded": True, "concept_id": concept_id}
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -1099,7 +1211,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "properties": {"days": {"type": "integer", "description": "Lookback period in days", "default": 5}},
         },
         execute=_exec_watchlist_movers,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_recent_alerts": ToolDef(
         name="get_recent_alerts",
@@ -1109,7 +1221,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "properties": {"hours": {"type": "integer", "description": "Lookback in hours", "default": 24}},
         },
         execute=_exec_recent_alerts,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_top_news": ToolDef(
         name="get_top_news",
@@ -1122,7 +1234,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_top_news,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_insider_buys": ToolDef(
         name="get_insider_buys",
@@ -1139,7 +1251,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get current technical signals: RSI extremes (oversold/overbought) and SMA golden/death crosses for watchlist tickers.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_technical_signals,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_filing_drift": ToolDef(
         name="get_filing_drift",
@@ -1153,14 +1265,14 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get tickers that match investment theses, with financial and keyword scores.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_thesis_matches,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_dip_scores": ToolDef(
         name="get_dip_scores",
         description="Get buy-the-dip composite scores with 8 dimension breakdown (price drop, fundamentals, technicals, sentiment, insider, sector relative).",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_dip_scores,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "generate_full_briefing": ToolDef(
         name="generate_full_briefing",
@@ -1178,7 +1290,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "required": ["ticker"],
         },
         execute=_exec_lookup_ticker,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "lookup_filing_analysis": ToolDef(
         name="lookup_filing_analysis",
@@ -1200,7 +1312,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "required": ["ticker"],
         },
         execute=_exec_sentiment_summary,
-        personas=["analyst"],
+        personas=["analyst", "edge"],
     ),
     "search_tickers": ToolDef(
         name="search_tickers",
@@ -1213,7 +1325,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_search_tickers,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "capture_feature_request": ToolDef(
         name="capture_feature_request",
@@ -1263,7 +1375,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_macro_indicators,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_earnings_calendar": ToolDef(
         name="get_earnings_calendar",
@@ -1277,7 +1389,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_earnings_calendar,
-        personas=["analyst"],
+        personas=["analyst", "edge"],
     ),
     "get_earnings_analysis": ToolDef(
         name="get_earnings_analysis",
@@ -1288,7 +1400,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "required": ["ticker"],
         },
         execute=_exec_earnings_analysis,
-        personas=["analyst", "thesis"],
+        personas=["analyst", "thesis", "edge"],
     ),
     "get_earnings_sentiment": ToolDef(
         name="get_earnings_sentiment",
@@ -1310,13 +1422,13 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         input_schema={
             "type": "object",
             "properties": {
-                "target_persona": {"type": "string", "enum": ["analyst", "thesis", "pm"]},
+                "target_persona": {"type": "string", "enum": ["edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"]},
                 "reason": {"type": "string", "description": "Brief explanation of why this handoff is suggested"},
             },
             "required": ["target_persona", "reason"],
         },
         execute=_exec_suggest_handoff,
-        personas=["analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"],
+        personas=["edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"],
     ),
     # ─── Simulation Engine Tools ───────────────────────────────────────────
     "get_paper_portfolio": ToolDef(
@@ -1324,7 +1436,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get the current paper portfolio state — open positions, P&L attribution by thesis, and portfolio-level metrics. All play-money.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_paper_portfolio,
-        personas=["analyst", "thesis_lord"],
+        personas=["analyst", "thesis_lord", "edge"],
     ),
     "propose_thesis": ToolDef(
         name="propose_thesis",
@@ -1358,7 +1470,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_thesis_lifecycle,
-        personas=["thesis_lord", "post_mortem"],
+        personas=["thesis_lord", "post_mortem", "edge"],
     ),
     "get_simulation_log": ToolDef(
         name="get_simulation_log",
@@ -1408,7 +1520,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get P&L attribution by thesis — which ideas are driving returns in the paper portfolio.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_performance_attribution,
-        personas=["thesis_lord", "post_mortem"],
+        personas=["thesis_lord", "post_mortem", "edge"],
     ),
     "get_vol_surface": ToolDef(
         name="get_vol_surface",
@@ -1419,7 +1531,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "required": ["ticker"],
         },
         execute=_exec_get_vol_surface,
-        personas=["vol_slayer", "analyst"],
+        personas=["vol_slayer", "analyst", "edge"],
     ),
     "get_options_chain_data": ToolDef(
         name="get_options_chain_data",
@@ -1469,7 +1581,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "required": ["ticker"],
         },
         execute=_exec_get_heston_params,
-        personas=["vol_slayer", "heston_cal"],
+        personas=["vol_slayer", "heston_cal", "edge"],
     ),
     "price_option_heston": ToolDef(
         name="price_option_heston",
@@ -1573,7 +1685,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_agent_memories,
-        personas=["post_mortem"],
+        personas=["post_mortem", "edge"],
     ),
     "search_decision_log": ToolDef(
         name="search_decision_log",
@@ -1588,6 +1700,28 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         },
         execute=_exec_search_decision_log,
         personas=["post_mortem"],
+    ),
+    # ─── Learning Layer (Edge-only) ───────────────────────────────────────
+    "get_learning_nugget": ToolDef(
+        name="get_learning_nugget",
+        description="Find a finance/quant concept the user hasn't learned yet, with real platform data to ground the explanation. Call this at the start of each conversation.",
+        input_schema={"type": "object", "properties": {}},
+        execute=_exec_get_learning_nugget,
+        personas=["edge"],
+    ),
+    "record_lesson_taught": ToolDef(
+        name="record_lesson_taught",
+        description="Record that a concept was taught to the user so it won't be repeated next session. Call after successfully teaching a concept.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "concept_id": {"type": "string", "description": "The concept_id from get_learning_nugget"},
+                "summary": {"type": "string", "description": "Brief summary of what was taught"},
+            },
+            "required": ["concept_id"],
+        },
+        execute=_exec_record_lesson_taught,
+        personas=["edge"],
     ),
 }
 

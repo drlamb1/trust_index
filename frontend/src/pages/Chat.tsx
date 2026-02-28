@@ -1,4 +1,4 @@
-// Chat — Conversational interface with all 8 personas
+// Chat — Conversational interface with all 9 personas
 // SSE streaming via fetch + ReadableStream
 // Persona tabs, tool result cards, KaTeX math, markdown
 
@@ -348,6 +348,23 @@ export default function Chat() {
               return { ...m, parts: [...m.parts, { type: 'text', text: '' }] }
             }))
             break
+
+          case 'handoff': {
+            const targetPersona = (event.data as { target_persona: string; reason: string }).target_persona as PersonaName
+            const reason = (event.data as { target_persona: string; reason: string }).reason
+            const targetName = PERSONAS[targetPersona]?.display_name ?? targetPersona
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              return {
+                ...m,
+                parts: [
+                  ...m.parts,
+                  { type: 'text' as const, text: `\n\n---\n**Suggested:** Switch to **${targetName}** tab — ${reason}` },
+                ],
+              }
+            }))
+            break
+          }
 
           case 'done':
             setMessages(prev => prev.map(m =>

@@ -15,14 +15,14 @@ export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
       user: null,
-      activePersona: 'analyst',
+      activePersona: 'edge',
       isAuthenticated: false,
 
       setUser: (user) => set({ user, isAuthenticated: !!user }),
 
       setPersona: (persona) => set({ activePersona: persona }),
 
-      logout: () => set({ user: null, isAuthenticated: false, activePersona: 'analyst' }),
+      logout: () => set({ user: null, isAuthenticated: false, activePersona: 'edge' }),
     }),
     {
       name: 'ef-auth',

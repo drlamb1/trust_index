@@ -66,7 +66,7 @@ async def _get_or_create_conversation(
         id=str(uuid.uuid4()),
         user_id=None,  # Set by caller via chat_turn
         title=None,
-        active_persona="analyst",
+        active_persona="edge",
         message_count=0,
         total_input_tokens=0,
         total_output_tokens=0,
@@ -247,7 +247,7 @@ async def chat_turn(
         conv = await _get_or_create_conversation(session, conversation_id)
 
         # 2. Route to persona
-        _ALL_PERSONAS = {"analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
+        _ALL_PERSONAS = {"edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
         if persona_override and persona_override in _ALL_PERSONAS:
             persona_name = persona_override
             cleaned_text = user_text
