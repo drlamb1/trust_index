@@ -168,6 +168,7 @@ class SimEventType(str, enum.Enum):
     RETIREMENT = "retirement"
     POST_MORTEM = "post_mortem"
     MEMORY_CONSOLIDATED = "memory_consolidated"
+    NOTE = "note"
 
 
 class VolModelType(str, enum.Enum):
