@@ -11,7 +11,7 @@ DAYS    ?= 365       # override with: make ingest-prices DAYS=90
         create-admin test test-unit \
         ingest-prices ingest-filings ingest-insider ingest-news ingest-macro ingest-transcripts \
         ticker-list \
-        railway-deploy railway-deploy-worker railway-deploy-all \
+        railway-deploy railway-deploy-worker \
         railway-migrate railway-admin railway-logs railway-logs-worker \
         simulation-worker railway-deploy-simulation railway-deploy-all-3
 
@@ -111,7 +111,7 @@ init: up migrate
 	$(PYTHON) cli.py init --skip-sp500
 
 worker: up
-	$(PYTHON) -m celery -A scheduler.tasks worker --loglevel=info
+	$(PYTHON) -m celery -A scheduler.tasks worker --beat --loglevel=info -Q ingestion,analysis,alerts,delivery,simulation
 
 serve: up
 	$(PYTHON) cli.py serve
@@ -150,9 +150,6 @@ railway-deploy:
 railway-deploy-worker:
 	railway up --service edgefinder-worker
 
-railway-deploy-all:
-	railway up --service edgefinder
-	railway up --service edgefinder-worker
 
 railway-migrate:
 	railway run .venv/bin/python -m alembic upgrade head

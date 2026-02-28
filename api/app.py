@@ -1273,10 +1273,14 @@ def create_app() -> FastAPI:
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
-    # CORS
+    # CORS — never combine allow_origins=["*"] with allow_credentials=True
+    origins = settings.cors_origin_list
+    if origins == ["*"] and settings.is_production:
+        logger.warning("CORS_ORIGINS is '*' in production — restricting to same-origin only")
+        origins = []
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=settings.cors_origin_list,
+        allow_origins=origins,
         allow_credentials=True,
         allow_methods=["*"],
         allow_headers=["*"],

@@ -16,5 +16,5 @@ ENV PYTHONPATH=/app
 
 EXPOSE 8050
 
-# Dispatch via PROCESS_TYPE env var: "web" (default) or "worker"
+# Dispatch via PROCESS_TYPE env var: web | worker | simulation-worker | beat
 CMD ["./entrypoint.sh"]

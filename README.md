@@ -206,13 +206,13 @@ What's covered: price ingestion mocks, SEC EDGAR parsing, news dedup, sentiment 
 │   ├── personas.py        8 personas: Analyst, Thesis Genius, PM,
 │   │                        Thesis Lord, Vol Surface Slayer, Heston Calibrator,
 │   │                        Deep Hedge Alchemist, Post-Mortem Priest
-│   ├── tools.py           23+ tool implementations
+│   ├── tools.py           44 tool implementations
 │   └── router.py          4-tier routing (prefix → keyword → Haiku → default)
 ├── simulation/          Stochastic vol + thesis simulation engine
 │   ├── black_scholes.py   BSM baseline: pricing, Greeks, IV solver
 │   ├── heston.py          Heston model: char function, calibration, QE Monte Carlo
 │   ├── vol_surface.py     IV surface: SVI fitting, Dupire local vol, arb detection
-│   ├── backtester.py      walk-forward backtest + Monte Carlo permutation test
+│   ├── backtester.py      walk-forward backtest + stationary block bootstrap
 │   ├── paper_portfolio.py paper position manager, stop-loss, MTM
 │   ├── thesis_generator.py Claude-powered thesis generation from signals
 │   ├── deep_hedging.py    Buehler et al. deep hedging env (CVaR, policy stub)

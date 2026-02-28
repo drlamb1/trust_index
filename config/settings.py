@@ -195,10 +195,16 @@ class Settings(BaseSettings):
 
     @field_validator("secret_key")
     @classmethod
-    def validate_secret_key(cls, v: str) -> str:
+    def validate_secret_key(cls, v: str, info) -> str:
         if v == "change-me-in-production":
+            import os
+            env = os.getenv("ENVIRONMENT", "development")
+            if env == "production":
+                raise ValueError(
+                    "SECRET_KEY cannot be 'change-me-in-production' in production. "
+                    "Generate a secure key: openssl rand -hex 32"
+                )
             import warnings
-
             warnings.warn(
                 "SECRET_KEY is using the default value. "
                 "Generate a secure key: openssl rand -hex 32",
