@@ -470,6 +470,9 @@ async def chat_turn(
             # Add tool results to context for next round
             context_messages.append({"role": "user", "content": tool_results})
 
+            # Signal frontend that a new text round is starting (preserves prior text)
+            yield _sse("round_start", round=round_num + 1)
+
         # 7. Update conversation stats
         conv.message_count = seq - 1
         conv.total_input_tokens += total_input

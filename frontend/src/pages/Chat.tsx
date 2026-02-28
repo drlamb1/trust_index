@@ -334,10 +334,18 @@ export default function Chat() {
               const newParts: MessagePart[] = [
                 ...m.parts,
                 { type: 'tool_result', toolName: event.data.name, toolResult: event.data.result },
-                { type: 'text', text: '' },
               ]
-              currentText = ''
               return { ...m, parts: newParts }
+            }))
+            break
+
+          case 'round_start':
+            // New Claude response round after tool execution — freeze the thinking text
+            // and start a fresh text accumulator so both are visible
+            currentText = ''
+            setMessages(prev => prev.map(m => {
+              if (m.id !== assistantId) return m
+              return { ...m, parts: [...m.parts, { type: 'text', text: '' }] }
             }))
             break
 
