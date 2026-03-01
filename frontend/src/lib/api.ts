@@ -131,6 +131,10 @@ export const macro = {
 
 // ─── Ticker ───
 
+export const tickers = {
+  list: () => req<Array<{ symbol: string; name: string | null }>>('/api/tickers'),
+}
+
 export const ticker = {
   summary: (symbol: string) => req<TickerSummary>(`/api/ticker/${symbol}`),
   priceHistory: (symbol: string, days = 90) =>
