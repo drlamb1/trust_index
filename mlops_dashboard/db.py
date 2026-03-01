@@ -50,7 +50,8 @@ def query_df(sql: str, params: tuple = ()) -> pd.DataFrame:
     conn = get_connection()
     try:
         return pd.read_sql_query(sql, conn, params=params)
-    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+    except (psycopg2.OperationalError, psycopg2.InterfaceError, pd.errors.DatabaseError):
+        # Neon cold-starts or pooler timeouts surface as DatabaseError via pandas
         st.cache_resource.clear()
         conn = get_connection()
         return pd.read_sql_query(sql, conn, params=params)
