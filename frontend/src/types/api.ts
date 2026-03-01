@@ -202,12 +202,21 @@ export interface SimulationLog {
 export interface AgentMemory {
   id: number
   agent_name: string
-  memory_type: 'insight' | 'pattern' | 'failure' | 'success'
+  memory_type: 'insight' | 'pattern' | 'failure' | 'success' | 'lesson_taught'
   content: string
   confidence: number
   evidence: Record<string, unknown> | null
   access_count: number
   created_at: string
+}
+
+export interface DailyBriefingResponse {
+  id: number
+  date: string
+  edger_synthesis: string | null
+  lesson_taught: string | null
+  content_md: string | null
+  delivered_at: string | null
 }
 
 export interface SimulationStats {

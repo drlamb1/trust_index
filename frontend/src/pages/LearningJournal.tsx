@@ -13,6 +13,7 @@ const MEMORY_BORDER: Record<string, string> = {
   pattern: 'var(--color-cyan)',
   failure: 'var(--color-danger)',
   success: 'var(--color-success)',
+  lesson_taught: 'hsl(260 60% 65%)',
 }
 
 const MEMORY_ICON: Record<string, string> = {
@@ -20,6 +21,7 @@ const MEMORY_ICON: Record<string, string> = {
   pattern: '🔄',
   failure: '⚠️',
   success: '✅',
+  lesson_taught: '🎓',
 }
 
 function MemoryCard({ memory }: { memory: AgentMemory }) {
@@ -99,7 +101,7 @@ export default function LearningJournal() {
           />
         </div>
 
-        {['', 'insight', 'pattern', 'failure', 'success'].map(t => (
+        {['', 'insight', 'pattern', 'failure', 'success', 'lesson_taught'].map(t => (
           <button
             key={t}
             onClick={() => setTypeFilter(t)}
@@ -111,7 +113,7 @@ export default function LearningJournal() {
               border: `1px solid ${typeFilter === t ? (MEMORY_BORDER[t] ?? 'var(--color-amber)') + '60' : 'var(--color-border)'}`,
             }}
           >
-            {t === '' ? 'All' : t}
+            {t === '' ? 'All' : t === 'lesson_taught' ? 'lessons' : t}
           </button>
         ))}
       </div>

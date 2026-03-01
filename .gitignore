@@ -66,3 +66,4 @@ credentials.json
 *.pkl
 *.npz
 ml/checkpoints/
+.vercel

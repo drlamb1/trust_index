@@ -7,6 +7,7 @@ import type {
   Alert,
   Conversation,
   ChatMessage,
+  DailyBriefingResponse,
   HestonParams,
   MacroPulseCard,
   PortfolioSummary,
@@ -155,6 +156,7 @@ export const briefing = {
     if (!res.ok) throw new Error(`${res.status}`)
     return res.text()
   },
+  latest: () => req<DailyBriefingResponse>('/api/briefings/latest'),
 }
 
 // ─── ML ───
