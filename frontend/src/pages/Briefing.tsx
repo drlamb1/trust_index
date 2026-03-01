@@ -3,10 +3,11 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { briefing } from '@/lib/api'
-import { RefreshCw, GraduationCap, ChevronDown, ChevronUp } from 'lucide-react'
+import { RefreshCw, GraduationCap, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
 
 // Maps concept_id → { name, description, difficulty }
 const CONCEPTS: Record<string, { name: string; desc: string; level: string }> = {
@@ -39,6 +40,7 @@ const LEVEL_COLOR: Record<string, string> = {
 }
 
 export default function Briefing() {
+  const navigate = useNavigate()
   const { data: markdown, isLoading, isError, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['briefing'],
     queryFn: briefing.markdown,
@@ -231,13 +233,15 @@ export default function Briefing() {
                 </ReactMarkdown>
               </div>
 
-              {/* Lesson taught card */}
+              {/* Lesson taught card — clickable, opens chat with Edger */}
               {latest.lesson_taught && (() => {
                 const concept = CONCEPTS[latest.lesson_taught]
                 const level = concept?.level ?? 'intermediate'
                 const levelColor = LEVEL_COLOR[level] ?? 'var(--color-text-muted)'
+                const conceptName = concept?.name ?? latest.lesson_taught.replace(/_/g, ' ')
                 return (
-                  <div
+                  <button
+                    onClick={() => navigate(`/chat?persona=edge&message=Teach me about ${conceptName} — how does it apply to our current theses?`)}
                     style={{
                       marginTop: 16,
                       background: 'hsl(228 18% 10%)',
@@ -245,13 +249,19 @@ export default function Briefing() {
                       borderRadius: 8,
                       padding: '14px 20px',
                       display: 'flex', alignItems: 'center', gap: 12,
+                      width: '100%',
+                      cursor: 'pointer',
+                      textAlign: 'left',
+                      transition: 'border-color 0.15s',
                     }}
+                    onMouseEnter={e => (e.currentTarget.style.borderColor = levelColor)}
+                    onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
                   >
                     <GraduationCap size={18} style={{ color: levelColor, flexShrink: 0 }} />
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
                         <span style={{ fontFamily: 'var(--font-sans)', fontSize: 12, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-                          {concept?.name ?? latest.lesson_taught.replace(/_/g, ' ')}
+                          {conceptName}
                         </span>
                         <span
                           className="pill"
@@ -271,7 +281,11 @@ export default function Briefing() {
                         </div>
                       )}
                     </div>
-                  </div>
+                    <div className="flex items-center gap-1" style={{ flexShrink: 0, color: 'var(--color-text-dim)', fontSize: 10, fontFamily: 'var(--font-sans)' }}>
+                      <MessageCircle size={12} />
+                      <span>Learn more</span>
+                    </div>
+                  </button>
                 )
               })()}
             </>

@@ -485,11 +485,11 @@ export default function Chat() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-col flex-1" style={{ minWidth: 0 }}>
-      {/* Persona selector */}
+      <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0 }}>
+      {/* Persona selector — sticky at top */}
       <div
-        className="flex gap-2 pb-4 items-center"
-        style={{ overflowX: 'auto', flexShrink: 0 }}
+        className="flex gap-2 pb-3 items-center"
+        style={{ overflowX: 'auto', flexShrink: 0, borderBottom: '1px solid var(--color-border)', marginBottom: 8 }}
       >
         <button
           onClick={() => setHistoryOpen(!historyOpen)}
@@ -562,25 +562,6 @@ export default function Chat() {
             </div>
           </div>
         )}
-        {!isLoadingHistory && messages.length > 0 && (
-          <div style={{ textAlign: 'center', paddingBottom: 12 }}>
-            <button
-              onClick={() => {
-                localStorage.removeItem(convKey(activePersona))
-                setConversationId(null)
-                setMessages([])
-              }}
-              style={{
-                background: 'transparent', border: '1px solid var(--color-border)',
-                borderRadius: 6, padding: '3px 10px', cursor: 'pointer',
-                fontFamily: 'var(--font-mono)', fontSize: 10,
-                color: 'var(--color-text-dim)',
-              }}
-            >
-              new conversation
-            </button>
-          </div>
-        )}
         {messages.map(m => (
           <MessageBubble key={m.id} {...m} />
         ))}
@@ -592,6 +573,27 @@ export default function Chat() {
         className="glass flex gap-3 items-end"
         style={{ padding: '12px 16px', flexShrink: 0 }}
       >
+        {/* New conversation button — always accessible */}
+        {messages.length > 0 && (
+          <button
+            onClick={() => {
+              localStorage.removeItem(convKey(activePersona))
+              setConversationId(null)
+              setMessages([])
+            }}
+            title="New conversation"
+            style={{
+              flexShrink: 0, width: 32, height: 32, borderRadius: 8,
+              background: 'transparent',
+              border: '1px solid var(--color-border)',
+              cursor: 'pointer',
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              color: 'var(--color-text-dim)',
+            }}
+          >
+            <Plus size={14} />
+          </button>
+        )}
         <textarea
           value={input}
           onChange={e => setInput(e.target.value)}
