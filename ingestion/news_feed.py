@@ -45,6 +45,23 @@ DEFAULT_RSS_FEEDS: dict[int, list[str]] = {
     ],
 }
 
+# General / world news — wars, elections, tariffs, pandemics move markets
+# before the financial press catches up. Tier 3 (unstructured, NLP-tagged).
+WORLD_NEWS_RSS_FEEDS: dict[int, list[str]] = {
+    2: [
+        "https://feeds.reuters.com/reuters/topNews",
+        "https://feeds.reuters.com/reuters/worldNews",
+        "https://feeds.bbci.co.uk/news/world/rss.xml",
+    ],
+    3: [
+        "https://rss.nytimes.com/services/xml/rss/nyt/World.xml",
+        "https://feeds.npr.org/1001/rss.xml",  # NPR News
+        "https://www.aljazeera.com/xml/rss/all.xml",
+        "https://rss.nytimes.com/services/xml/rss/nyt/Politics.xml",
+        "https://feeds.reuters.com/reuters/politicsNews",
+    ],
+}
+
 _EXECUTOR = ThreadPoolExecutor(max_workers=4)
 
 
@@ -353,6 +370,75 @@ async def fetch_newsapi_articles(
 
 
 # ---------------------------------------------------------------------------
+# NewsAPI.org — top headlines (general / world / politics)
+# ---------------------------------------------------------------------------
+
+
+async def fetch_newsapi_top_headlines(
+    api_key: str = "",
+    categories: tuple[str, ...] = ("general", "business", "science", "technology"),
+    country: str = "us",
+    page_size: int = 40,
+) -> list[dict[str, Any]]:
+    """
+    Fetch top headlines across broad categories via NewsAPI.
+    These are NOT ticker-specific — they capture macro events (wars, elections,
+    tariffs, pandemics) that move markets before financial press catches up.
+    Ticker tagging happens downstream via NLP in store_news_articles.
+    """
+    if not api_key:
+        return []
+
+    url = "https://newsapi.org/v2/top-headlines"
+    articles: list[dict[str, Any]] = []
+
+    async with httpx.AsyncClient(timeout=15.0) as client:
+        for category in categories:
+            params = {
+                "category": category,
+                "country": country,
+                "pageSize": page_size,
+                "apiKey": api_key,
+            }
+            try:
+                resp = await client.get(url, params=params)
+                resp.raise_for_status()
+                data = resp.json()
+            except Exception as exc:
+                logger.warning("NewsAPI top-headlines (%s) error: %s", category, exc)
+                continue
+
+            for item in data.get("articles", []):
+                title = (item.get("title") or "").strip()
+                article_url = (item.get("url") or "").strip()
+                if not title or not article_url or title == "[Removed]":
+                    continue
+
+                published_raw = item.get("publishedAt") or ""
+                try:
+                    published_at = datetime.fromisoformat(published_raw.replace("Z", "+00:00"))
+                except Exception:
+                    published_at = datetime.now(UTC)
+
+                source_name = (item.get("source") or {}).get("name", "NewsAPI")
+
+                articles.append(
+                    {
+                        "title": title,
+                        "url": article_url,
+                        "summary": (item.get("description") or "")[:500],
+                        "published_at": published_at,
+                        "source_name": source_name,
+                        "source_tier": 3,
+                        "ticker_ids": [],  # tagged by NLP downstream
+                        "raw_content_hash": compute_content_hash(article_url, title),
+                    }
+                )
+
+    return articles
+
+
+# ---------------------------------------------------------------------------
 # DB storage
 # ---------------------------------------------------------------------------
 
@@ -479,23 +565,37 @@ async def aggregate_news_batch(
     finnhub_api_key: str = "",
     newsapi_key: str = "",
     rss_feed_urls: dict[int, list[str]] | None = None,
+    world_rss_feed_urls: dict[int, list[str]] | None = None,
     days: int = 7,
 ) -> int:
     """
     Full news aggregation run:
-      1. RSS feeds (general financial news, tagged to tickers by NLP)
-      2. Finnhub per-ticker news (if api_key provided)
-      3. NewsAPI per-ticker news (if api_key provided)
+      1. Financial RSS feeds (tagged to tickers by NLP)
+      2. World/general RSS feeds (wars, elections, tariffs — tagged by NLP)
+      3. NewsAPI top headlines (general/business/science/tech categories)
+      4. Finnhub per-ticker news (if api_key provided)
+      5. NewsAPI per-ticker news (if api_key provided)
 
     Returns total articles inserted.
     """
     articles: list[dict[str, Any]] = []
 
-    # 1. RSS (general; ticker tagging done in store_news_articles)
+    # 1. Financial RSS (existing)
     rss_articles = await fetch_rss_articles(feed_urls=rss_feed_urls, max_age_days=days)
     articles.extend(rss_articles)
 
-    # 2. Finnhub per-ticker (up to 500 tickers at 10 req/s — throttle externally)
+    # 2. World / general news RSS — macro events that move everything
+    if world_rss_feed_urls is None:
+        world_rss_feed_urls = WORLD_NEWS_RSS_FEEDS
+    world_articles = await fetch_rss_articles(feed_urls=world_rss_feed_urls, max_age_days=days)
+    articles.extend(world_articles)
+
+    # 3. NewsAPI top headlines (general categories, not ticker-specific)
+    if newsapi_key:
+        headlines = await fetch_newsapi_top_headlines(api_key=newsapi_key)
+        articles.extend(headlines)
+
+    # 4. Finnhub per-ticker (up to 500 tickers at 10 req/s — throttle externally)
     if finnhub_api_key:
         fh_tasks = [
             fetch_finnhub_news(t.symbol, days=days, api_key=finnhub_api_key) for t in tickers
@@ -511,9 +611,13 @@ async def aggregate_news_batch(
 
     inserted = await store_news_articles(session, articles, tickers=tickers)
 
-    # 3. NewsAPI (slower — rate limited; do sequentially)
+    # 5. NewsAPI per-ticker (rate limited — free tier ~100 req/day).
+    #    Top-headlines (step 3) already covers broad news with just 4 calls.
+    #    Per-ticker queries are supplementary — cap at 80 tickers per run,
+    #    with a 1s delay between calls to stay under the rate limit.
     if newsapi_key:
-        for ticker in tickers:
+        newsapi_budget = 80  # reserve ~20 calls for top-headlines + buffer
+        for i, ticker in enumerate(tickers[:newsapi_budget]):
             query = f'"{ticker.symbol}"'
             na = await fetch_newsapi_articles(
                 query=query,
@@ -522,5 +626,7 @@ async def aggregate_news_batch(
                 api_key=newsapi_key,
             )
             inserted += await store_news_articles(session, na, tickers=[ticker])
+            if i < newsapi_budget - 1:
+                await asyncio.sleep(1.0)
 
     return inserted

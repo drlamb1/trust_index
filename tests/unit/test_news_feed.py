@@ -434,6 +434,7 @@ class TestAggregateNewsBatch:
             finnhub_api_key="",
             newsapi_key="",
             rss_feed_urls={},  # Empty RSS — skip feed fetching
+            world_rss_feed_urls={},  # Empty world RSS too
         )
         # No articles to insert; should return 0 cleanly
         assert inserted == 0
