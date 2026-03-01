@@ -525,7 +525,12 @@ export default function Chat() {
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 11 }}>
                 {p.icon}
               </span>
-              {p.display_name}
+              <div className="flex flex-col items-start">
+                <span>{p.display_name}</span>
+                <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--color-text-dim)' }}>
+                  {p.role}
+                </span>
+              </div>
             </button>
           )
         })}
