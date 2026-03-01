@@ -167,8 +167,11 @@ function PaperPortfolioTable() {
       </div>
 
       {!data?.positions?.length ? (
-        <div style={{ color: 'var(--color-text-dim)', fontSize: 11, fontFamily: 'var(--font-sans)' }}>
-          No open positions. Theses that pass backtesting enter the paper portfolio.
+        <div style={{ color: 'var(--color-text-dim)', fontSize: 11, fontFamily: 'var(--font-sans)', lineHeight: 1.6 }}>
+          <div>No open positions yet.</div>
+          <div style={{ marginTop: 4, fontSize: 10 }}>
+            Flow: Thesis generated → backtested → survivors (positive Sharpe) get promoted to PAPER_LIVE → positions opened here with simulated capital.
+          </div>
         </div>
       ) : (
         <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
