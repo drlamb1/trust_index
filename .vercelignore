@@ -8,7 +8,7 @@ ingestion/
 analysis/
 alerts/
 scheduler/
-simulation/
+/simulation/
 chat/
 api/
 tests/
