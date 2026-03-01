@@ -106,10 +106,21 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
     )
   }
 
+  const STATUS_COLOR: Record<string, string> = {
+    proposed: 'var(--color-text-muted)',
+    backtesting: 'var(--color-amber)',
+    paper_live: 'var(--color-success)',
+    retired: 'var(--color-text-dim)',
+    killed: 'var(--color-danger)',
+  }
+
+  // Canvas gets less height to make room for the clickable list
+  const canvasHeight = Math.max(height - 180, 120)
+
   return (
-    <div className="glass animate-entry" style={{ padding: '20px 24px', height, overflow: 'hidden' }}>
+    <div className="glass animate-entry" style={{ padding: '20px 24px', height, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
       {/* Header */}
-      <div className="flex items-center justify-between" style={{ marginBottom: 4 }}>
+      <div className="flex items-center justify-between" style={{ marginBottom: 4, flexShrink: 0 }}>
         <h2 style={{
           fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600,
           letterSpacing: '0.1em', textTransform: 'uppercase', color: 'var(--color-text-muted)',
@@ -117,17 +128,17 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
           Thesis Constellation
         </h2>
       </div>
-      <div style={{ color: 'var(--color-text-dim)', fontSize: 11, marginBottom: 12 }}>
-        Signal correlations · confidence-weighted · click a dot to explore
+      <div style={{ color: 'var(--color-text-dim)', fontSize: 11, marginBottom: 8, flexShrink: 0 }}>
+        Signal correlations · confidence-weighted
       </div>
 
       {/* Force graph */}
-      <div className="constellation-canvas" style={{ borderRadius: 8, overflow: 'hidden' }}>
+      <div className="constellation-canvas" style={{ borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
         <ForceGraph2D
           ref={graphRef}
           graphData={data}
           width={undefined}
-          height={height - 80}
+          height={canvasHeight}
           backgroundColor="transparent"
           nodeRelSize={1}
           nodeVal={node => (node as any).radius ** 2}
@@ -139,7 +150,6 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
             if (node.thesis) onThesisSelect?.(node.thesis)
           }}
           onNodeHover={(node: any) => {
-            // fragile: private API — no public accessor for ForceGraph2D canvas
             const el = graphRef.current?.['_canvas'] as HTMLCanvasElement | undefined
             if (el) el.style.cursor = node ? 'pointer' : 'default'
           }}
@@ -176,13 +186,52 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
       </div>
 
       {/* Legend */}
-      <div className="flex gap-4" style={{ marginTop: 8 }}>
+      <div className="flex gap-4" style={{ marginTop: 6, flexShrink: 0 }}>
         {Object.entries(CATEGORY_COLORS).filter(([k]) => k !== 'default').map(([key, color]) => (
           <div key={key} className="flex items-center gap-1.5" style={{ fontSize: 10, color: 'var(--color-text-muted)' }}>
             <div style={{ width: 8, height: 8, borderRadius: '50%', background: color, flexShrink: 0 }} />
             <span style={{ textTransform: 'capitalize', fontFamily: 'var(--font-sans)' }}>{key}</span>
           </div>
         ))}
+      </div>
+
+      {/* Clickable thesis list — DOM fallback for canvas nodes */}
+      <div style={{ marginTop: 8, flex: 1, overflowY: 'auto', minHeight: 0 }}>
+        {theses.map(t => {
+          const color = CATEGORY_COLORS[inferCategory(t)]
+          const statusColor = STATUS_COLOR[t.status] ?? 'var(--color-text-muted)'
+          return (
+            <button
+              key={t.id}
+              onClick={() => onThesisSelect?.(t)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8,
+                width: '100%', padding: '4px 6px', marginBottom: 2,
+                background: 'transparent', border: 'none', borderRadius: 4,
+                cursor: 'pointer', textAlign: 'left',
+              }}
+              onMouseEnter={e => (e.currentTarget.style.background = 'hsl(228 15% 14%)')}
+              onMouseLeave={e => (e.currentTarget.style.background = 'transparent')}
+            >
+              <div style={{ width: 6, height: 6, borderRadius: '50%', background: color, flexShrink: 0 }} />
+              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-primary)', flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {t.name}
+              </span>
+              {t.ticker_symbol && (
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-amber)', flexShrink: 0 }}>
+                  {t.ticker_symbol}
+                </span>
+              )}
+              <span className="pill" style={{
+                fontSize: 8, flexShrink: 0, padding: '1px 5px',
+                background: statusColor + '20', color: statusColor,
+                border: `1px solid ${statusColor}40`,
+              }}>
+                {t.status.replace('_', ' ')}
+              </span>
+            </button>
+          )
+        })}
       </div>
     </div>
   )
