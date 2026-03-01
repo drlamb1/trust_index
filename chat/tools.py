@@ -333,23 +333,56 @@ async def _exec_update_feature(session: AsyncSession, params: dict) -> dict:
 
 
 async def _exec_list_capabilities(session: AsyncSession, params: dict) -> dict:
+    from sqlalchemy import func
+
+    from chat.personas import PERSONAS as PERSONA_CONFIGS
+    from core.models import (
+        BacktestRun,
+        PaperPortfolio,
+        SimulatedThesis,
+        Ticker,
+    )
+
+    # Live counts from database
+    ticker_count = (await session.execute(select(func.count(Ticker.id)).where(Ticker.is_active.is_(True)))).scalar() or 0
+    thesis_count = (await session.execute(select(func.count(SimulatedThesis.id)))).scalar() or 0
+    backtest_count = (await session.execute(select(func.count(BacktestRun.id)))).scalar() or 0
+    portfolio_count = (await session.execute(select(func.count(PaperPortfolio.id)))).scalar() or 0
+
+    # Live persona and tool counts
+    personas = [
+        {"name": p.display_name, "role": p.role}
+        for p in PERSONA_CONFIGS.values()
+    ]
+    tool_count = len(TOOL_REGISTRY)
+
     return {
+        "platform_stats": {
+            "active_tickers": ticker_count,
+            "simulated_theses": thesis_count,
+            "backtest_runs": backtest_count,
+            "paper_portfolios": portfolio_count,
+            "chat_personas": len(personas),
+            "chat_tools": tool_count,
+        },
+        "personas": personas,
         "capabilities": [
             "10-K/10-Q filing analysis with Claude (health scores, red flags, bull/bear points)",
             "Price data from yfinance with technical indicators (RSI, SMA 50/200, Bollinger, ATR, volume ratio)",
             "News aggregation from RSS with Claude Haiku sentiment scoring (-1 to +1)",
             "8-dimension buy-the-dip composite scoring (price drop, fundamentals, technicals, sentiment, insider, sector relative)",
             "Alert engine with 9 rules (RSI oversold, golden/death cross, volume spike, dip, dip+insider, filing red flag, earnings beat/miss)",
-            "Investment thesis matching from theses.yaml (financial criteria + keyword density)",
+            "Investment thesis matching (financial criteria + signal convergence)",
             "FRED macroeconomic indicators (Fed funds rate, 10Y/2Y yields, yield curve, unemployment, CPI)",
             "Earnings call transcript analysis with Claude (management tone, forward guidance, key topics, bull/bear signals)",
             "Multi-quarter earnings sentiment trajectory tracking",
             "Earnings surprise alerts (EPS beat/miss thresholds)",
-            "Daily/weekly briefing generation with macro + earnings sections",
-            "11 watchlist tickers with full data: NVDA, AAPL, MSFT, GOOGL, META, AMZN, PLTR, VST, CEG, RKLB, SMR",
+            "Daily briefing generation with Edger synthesis and concept teaching",
+            "Simulation engine: Heston stochastic vol, Black-Scholes, vol surface fitting, deep hedging",
+            "Paper portfolio management with backtesting (Monte Carlo block bootstrap)",
             "Institutional holdings with CUSIP-based matching (OpenFIGI + rapidfuzz)",
-            "Web dashboard at localhost:8050 with dark theme",
-            "Chat with 3 personas: Analyst, Thesis Genius, Product Manager",
+            "ML pipeline: FinBERT sentiment, XGBoost signal ranker, deep hedging policy",
+            f"Web frontend at trust-index-cyan.vercel.app (dark theme, {len(personas)} persona chat)",
         ],
     }
 
