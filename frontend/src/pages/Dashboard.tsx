@@ -9,6 +9,7 @@ import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
 import SimulationEngine from '@/components/dashboard/SimulationEngine'
 import IntelligenceFeed from '@/components/dashboard/IntelligenceFeed'
 import AgentConsole from '@/components/dashboard/AgentConsole'
+import WelcomeOverlay from '@/components/onboarding/WelcomeOverlay'
 import type { SimulatedThesis } from '@/types/api'
 
 const STATUS_COLOR: Record<string, string> = {
@@ -120,9 +121,18 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
 
 export default function Dashboard() {
   const [selectedThesis, setSelectedThesis] = useState<SimulatedThesis | null>(null)
+  const [showOnboarding, setShowOnboarding] = useState(
+    () => !localStorage.getItem('ef_onboarding_done')
+  )
+
+  const dismissOnboarding = () => {
+    localStorage.setItem('ef_onboarding_done', '1')
+    setShowOnboarding(false)
+  }
 
   return (
     <div className="flex flex-col gap-4">
+      {showOnboarding && <WelcomeOverlay onDismiss={dismissOnboarding} />}
       {/* Market Pulse — top strip */}
       <MarketPulse />
 

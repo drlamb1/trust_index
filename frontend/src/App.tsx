@@ -9,6 +9,8 @@ import Chat from '@/pages/Chat'
 import LearningJournal from '@/pages/LearningJournal'
 import Briefing from '@/pages/Briefing'
 import TickerDetail from '@/pages/TickerDetail'
+import Guide from '@/pages/Guide'
+import Settings from '@/pages/Settings'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -43,7 +45,8 @@ export default function App() {
                     <Route path="/journal" element={<LearningJournal />} />
                     <Route path="/briefing" element={<Briefing />} />
                     <Route path="/tickers/:symbol" element={<TickerDetail />} />
-                    <Route path="/settings" element={<div style={{ color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', padding: 40 }}>Settings — coming soon</div>} />
+                    <Route path="/guide" element={<Guide />} />
+                    <Route path="/settings" element={<Settings />} />
                   </Routes>
                 </Layout>
               </RequireAuth>

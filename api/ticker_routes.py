@@ -4,6 +4,7 @@ EdgeFinder — Ticker Detail Routes
 Per-ticker data endpoints for the TickerDetail page.
 
 Routes:
+    GET /api/tickers                          — Active ticker list (for autocomplete)
     GET /api/ticker/{symbol}                  — Ticker info + latest price + technicals
     GET /api/ticker/{symbol}/price-history    — PriceBar history (default 90 days)
     GET /api/ticker/{symbol}/alerts           — Recent alerts for ticker
@@ -41,6 +42,25 @@ async def _get_ticker(session, symbol: str):
         select(Ticker).where(Ticker.symbol == symbol.upper())
     )
     return result.scalar_one_or_none()
+
+
+@router.get("/api/tickers")
+async def api_ticker_list(user: User = Depends(get_current_user)):
+    """Active ticker list for search autocomplete."""
+    from sqlalchemy import select
+    from core.database import AsyncSessionLocal
+    from core.models import Ticker
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(Ticker.symbol, Ticker.name)
+            .where(Ticker.is_active.is_(True))
+            .order_by(Ticker.symbol)
+        )
+        return JSONResponse([
+            {"symbol": r[0], "name": r[1]}
+            for r in result.all()
+        ])
 
 
 @router.get("/api/ticker/{symbol}")
@@ -201,6 +221,7 @@ async def api_ticker_alerts(
 @router.get("/api/ticker/{symbol}/theses")
 async def api_ticker_theses(
     symbol: str,
+    limit: int = Query(default=20, le=100),
     user: User = Depends(get_current_user),
 ):
     """SimulatedTheses linked to a ticker."""
@@ -218,7 +239,7 @@ async def api_ticker_theses(
             select(SimulatedThesis)
             .where(SimulatedThesis.ticker_ids.contains([ticker.id]))
             .order_by(desc(SimulatedThesis.created_at))
-            .limit(20)
+            .limit(limit)
         )
         theses = result.scalars().all()
 
@@ -241,6 +262,7 @@ async def api_ticker_theses(
 @router.get("/api/ticker/{symbol}/backtests")
 async def api_ticker_backtests(
     symbol: str,
+    limit: int = Query(default=20, le=100),
     user: User = Depends(get_current_user),
 ):
     """BacktestRun results for a ticker."""
@@ -258,7 +280,7 @@ async def api_ticker_backtests(
             .join(SimulatedThesis, BacktestRun.thesis_id == SimulatedThesis.id)
             .where(BacktestRun.ticker_id == ticker.id)
             .order_by(desc(BacktestRun.ran_at))
-            .limit(20)
+            .limit(limit)
         )
         rows = result.all()
 

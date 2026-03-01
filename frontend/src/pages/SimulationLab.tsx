@@ -3,6 +3,9 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
+import VolSurfaceHeatmap from '@/components/simulation/VolSurfaceHeatmap'
+import DecisionLog from '@/components/simulation/DecisionLog'
+import MLModelStatus from '@/components/simulation/MLModelStatus'
 import { simulation } from '@/lib/api'
 import type { SimulatedThesis, HestonParams, VolSurface } from '@/types/api'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -237,9 +240,27 @@ export default function SimulationLab() {
           <HestonPanel ticker={hestonTicker} />
         </div>
 
+        {/* Vol Surface */}
+        <div className="glass flex-1" style={{ padding: '20px 24px' }}>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+            Volatility Surface
+          </h3>
+          <VolSurfaceHeatmap ticker={hestonTicker} />
+        </div>
+
         {/* Paper Portfolio */}
         <div className="glass flex-1" style={{ padding: '20px 24px' }}>
           <PaperPortfolioTable />
+        </div>
+      </div>
+
+      {/* Decision Log + ML Models */}
+      <div className="flex gap-4" style={{ alignItems: 'flex-start', marginTop: 16 }}>
+        <div className="glass" style={{ padding: '20px 24px', flex: 2 }}>
+          <DecisionLog />
+        </div>
+        <div className="glass" style={{ padding: '20px 24px', flex: 1 }}>
+          <MLModelStatus />
         </div>
       </div>
 

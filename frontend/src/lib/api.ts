@@ -131,13 +131,17 @@ export const macro = {
 
 // ─── Ticker ───
 
+export const tickers = {
+  list: () => req<Array<{ symbol: string; name: string | null }>>('/api/tickers'),
+}
+
 export const ticker = {
   summary: (symbol: string) => req<TickerSummary>(`/api/ticker/${symbol}`),
   priceHistory: (symbol: string, days = 90) =>
     req<TickerPriceBar[]>(`/api/ticker/${symbol}/price-history?days=${days}`),
-  alerts: (symbol: string) => req<TickerAlert[]>(`/api/ticker/${symbol}/alerts`),
-  theses: (symbol: string) => req<SimulatedThesis[]>(`/api/ticker/${symbol}/theses`),
-  backtests: (symbol: string) => req<import('@/types/api').BacktestRun[]>(`/api/ticker/${symbol}/backtests`),
+  alerts: (symbol: string, limit = 30) => req<TickerAlert[]>(`/api/ticker/${symbol}/alerts?limit=${limit}`),
+  theses: (symbol: string, limit = 20) => req<SimulatedThesis[]>(`/api/ticker/${symbol}/theses?limit=${limit}`),
+  backtests: (symbol: string, limit = 20) => req<import('@/types/api').BacktestRun[]>(`/api/ticker/${symbol}/backtests?limit=${limit}`),
 }
 
 // ─── Briefing ───
@@ -151,4 +155,10 @@ export const briefing = {
     if (!res.ok) throw new Error(`${res.status}`)
     return res.text()
   },
+}
+
+// ─── ML ───
+
+export const ml = {
+  status: () => req<Record<string, unknown>>('/api/ml/status'),
 }

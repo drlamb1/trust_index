@@ -235,6 +235,7 @@ export type PersonaName = 'edge' | 'analyst' | 'thesis' | 'pm' | 'thesis_lord' |
 export interface PersonaInfo {
   name: PersonaName
   display_name: string
+  role: string
   color: string
   icon: string
 }
