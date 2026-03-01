@@ -224,6 +224,12 @@ export default function Chat() {
     enabled: historyOpen,
   })
 
+  // Prevent page-level scroll — only the message thread should scroll
+  useEffect(() => {
+    document.body.style.overflow = 'hidden'
+    return () => { document.body.style.overflow = '' }
+  }, [])
+
   // Auto-scroll on new messages
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
