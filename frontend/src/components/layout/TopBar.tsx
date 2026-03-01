@@ -44,7 +44,7 @@ function TickerSearch() {
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(-1)
   const navigate = useNavigate()
-  const blurTimeout = useRef<ReturnType<typeof setTimeout>>()
+  const blurTimeout = useRef<ReturnType<typeof setTimeout> | undefined>(undefined)
   const inputRef = useRef<HTMLInputElement>(null)
 
   const { data: tickerList = [] } = useQuery({
