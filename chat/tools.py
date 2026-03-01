@@ -309,6 +309,29 @@ async def _exec_list_features(session: AsyncSession, params: dict) -> dict:
     }
 
 
+async def _exec_update_feature(session: AsyncSession, params: dict) -> dict:
+    from chat.feature_capture import update_feature_request
+    fr = await update_feature_request(
+        session,
+        feature_id=params["id"],
+        status=params.get("status"),
+        priority=params.get("priority"),
+        title=params.get("title"),
+        user_story=params.get("user_story"),
+        tags=params.get("tags"),
+    )
+    if fr is None:
+        return {"error": f"Feature request #{params['id']} not found."}
+    return {
+        "id": fr.id,
+        "title": fr.title,
+        "status": fr.status,
+        "priority": fr.priority,
+        "tags": fr.tags,
+        "message": f"FR-{fr.id} updated.",
+    }
+
+
 async def _exec_list_capabilities(session: AsyncSession, params: dict) -> dict:
     return {
         "capabilities": [
@@ -1416,6 +1439,24 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "properties": {"status": {"type": "string", "enum": ["captured", "reviewed", "planned", "built"]}},
         },
         execute=_exec_list_features,
+        personas=["pm"],
+    ),
+    "update_feature_request": ToolDef(
+        name="update_feature_request",
+        description="Update a feature request's status, priority, title, user story, or tags. Use to mark items reviewed/planned/built, close duplicates (set status='duplicate', add tag with canonical FR id), or reprioritize.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "id": {"type": "integer", "description": "Feature request ID to update"},
+                "status": {"type": "string", "enum": ["captured", "reviewed", "planned", "built", "duplicate", "wont_do"], "description": "New status"},
+                "priority": {"type": "string", "enum": ["low", "medium", "high", "critical"]},
+                "title": {"type": "string", "description": "Updated title"},
+                "user_story": {"type": "string", "description": "Updated user story"},
+                "tags": {"type": "array", "items": {"type": "string"}, "description": "Tags (e.g. ['duplicate:FR-4', 'v2'])"},
+            },
+            "required": ["id"],
+        },
+        execute=_exec_update_feature,
         personas=["pm"],
     ),
     "list_available_capabilities": ToolDef(
