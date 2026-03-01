@@ -18,6 +18,9 @@ import uuid
 from collections.abc import AsyncGenerator
 from typing import Any
 
+import functools
+import pathlib
+
 import anthropic
 from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,6 +33,15 @@ from core.models import ChatConversation, ChatMessage
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
+
+
+@functools.lru_cache(maxsize=1)
+def _load_pm_brief() -> str:
+    """Load the PM architecture brief (cached for process lifetime)."""
+    path = pathlib.Path(__file__).resolve().parent.parent / "docs" / "pm_brief.md"
+    if path.exists():
+        return path.read_text()
+    return ""
 CONTEXT_WINDOW = 20  # max messages to include in context
 MAX_TOKENS = 8192
 
@@ -301,6 +313,11 @@ async def chat_turn(
                 "requires a member account. Focus on publicly available market data, "
                 "technicals, news sentiment, and macro indicators."
             )
+
+        if persona_name == "pm":
+            pm_brief = _load_pm_brief()
+            if pm_brief:
+                system_text += f"\n\n{pm_brief}"
 
         system_blocks = [
             {
