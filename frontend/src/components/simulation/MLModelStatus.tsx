@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { ml } from '@/lib/api'
+import { timeAgo } from '@/lib/timeAgo'
 
 interface ModelInfo {
   active: boolean
@@ -10,13 +11,6 @@ interface ModelInfo {
   size_kb?: number
   format?: string
   message?: string
-}
-
-function timeAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 60000
-  if (diff < 60) return `${Math.floor(diff)}m ago`
-  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
-  return `${Math.floor(diff / 1440)}d ago`
 }
 
 export default function MLModelStatus() {

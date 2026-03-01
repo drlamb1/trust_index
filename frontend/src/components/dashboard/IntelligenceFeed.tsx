@@ -6,6 +6,7 @@ import { Link, useNavigate } from 'react-router-dom'
 import { Zap, AlertTriangle, FileSearch, BarChart2, TrendingDown, Info } from 'lucide-react'
 import { createSimulationStream } from '@/lib/sse'
 import { agentColor } from '@/lib/personas'
+import { timeAgo } from '@/lib/timeAgo'
 
 interface FeedItem {
   id: number
@@ -22,14 +23,6 @@ function typeIcon(eventType: string) {
   if (eventType.includes('thesis') || eventType.includes('backtest')) return BarChart2
   if (eventType.includes('stop') || eventType.includes('exit')) return TrendingDown
   return Info
-}
-
-function timeAgo(iso: string): string {
-  const diff = (Date.now() - new Date(iso).getTime()) / 60000
-  if (diff < 1) return 'just now'
-  if (diff < 60) return `${Math.floor(diff)}m ago`
-  if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
-  return `${Math.floor(diff / 1440)}d ago`
 }
 
 function formatLine(item: FeedItem): string {

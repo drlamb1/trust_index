@@ -12,6 +12,7 @@ import { useAuthStore } from '@/stores/authStore'
 import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
 import { streamChat } from '@/lib/sse'
 import { BASE, getToken, chat as chatApi } from '@/lib/api'
+import { timeAgo } from '@/lib/timeAgo'
 import type { PersonaName, Conversation } from '@/types/api'
 
 // ─── Tool Result Card ───
@@ -409,12 +410,6 @@ export default function Chat() {
     // The useEffect on activePersona will reload messages
   }
 
-  const convTimeAgo = (iso: string): string => {
-    const diff = (Date.now() - new Date(iso).getTime()) / 60000
-    if (diff < 60) return `${Math.floor(diff)}m ago`
-    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
-    return `${Math.floor(diff / 1440)}d ago`
-  }
 
   return (
     <div className="flex" style={{ height: 'calc(100vh - 80px)' }}>
@@ -476,7 +471,7 @@ export default function Chat() {
                   </span>
                 </div>
                 <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', paddingLeft: 14 }}>
-                  {conv.message_count} msgs · {convTimeAgo(conv.created_at)}
+                  {conv.message_count} msgs · {timeAgo(conv.created_at)}
                 </div>
               </button>
             )
@@ -486,24 +481,30 @@ export default function Chat() {
 
       {/* Main chat area */}
       <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0 }}>
-      {/* Persona selector — sticky at top */}
+      {/* Persona selector — sticky at top, compact single-line tabs */}
       <div
-        className="flex gap-2 pb-3 items-center"
-        style={{ overflowX: 'auto', flexShrink: 0, borderBottom: '1px solid var(--color-border)', marginBottom: 8 }}
+        className="flex gap-1.5 pb-3 items-center"
+        style={{
+          overflowX: 'auto', flexShrink: 0,
+          borderBottom: '1px solid var(--color-border)', marginBottom: 8,
+          /* Fade hint on right edge when scrollable */
+          maskImage: 'linear-gradient(to right, black 90%, transparent 100%)',
+          WebkitMaskImage: 'linear-gradient(to right, black 90%, transparent 100%)',
+        }}
       >
         <button
           onClick={() => setHistoryOpen(!historyOpen)}
           title="Conversation history"
           className="flex items-center justify-center rounded-lg flex-shrink-0"
           style={{
-            width: 32, height: 32,
+            width: 28, height: 28,
             background: historyOpen ? 'var(--color-amber-muted)' : 'hsl(228 18% 10%)',
             border: `1px solid ${historyOpen ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
             cursor: 'pointer',
             color: historyOpen ? 'var(--color-amber)' : 'var(--color-text-dim)',
           }}
         >
-          <History size={14} />
+          <History size={12} />
         </button>
         {CHAT_PERSONAS.map(pName => {
           const p = PERSONAS[pName]
@@ -512,7 +513,8 @@ export default function Chat() {
             <button
               key={pName}
               onClick={() => setPersona(pName)}
-              className="flex items-center gap-2 px-3 py-2 rounded-lg flex-shrink-0 transition-colors"
+              title={p.role}
+              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg flex-shrink-0 transition-colors"
               style={{
                 fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 500,
                 border: `1px solid ${isActive ? p.color + '60' : 'var(--color-border)'}`,
@@ -520,17 +522,13 @@ export default function Chat() {
                 color: isActive ? p.color : 'var(--color-text-muted)',
                 cursor: 'pointer',
                 borderBottom: isActive ? `2px solid ${p.color}` : '2px solid transparent',
+                whiteSpace: 'nowrap',
               }}
             >
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 11 }}>
                 {p.icon}
               </span>
-              <div className="flex flex-col items-start">
-                <span>{p.display_name}</span>
-                <span style={{ fontSize: 9, fontWeight: 400, color: 'var(--color-text-dim)' }}>
-                  {p.role}
-                </span>
-              </div>
+              <span>{p.display_name}</span>
             </button>
           )
         })}
