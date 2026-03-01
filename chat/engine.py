@@ -531,8 +531,19 @@ async def get_conversation_messages(
     session: AsyncSession,
     conversation_id: str,
     limit: int = 100,
+    user_id: int | None = None,
 ) -> list[dict]:
-    """Get messages for a conversation."""
+    """Get messages for a conversation. When user_id is provided, verifies ownership."""
+    if user_id is not None:
+        conv = await session.execute(
+            select(ChatConversation.id).where(
+                ChatConversation.id == conversation_id,
+                ChatConversation.user_id == user_id,
+            )
+        )
+        if conv.scalar_one_or_none() is None:
+            return []
+
     result = await session.execute(
         select(ChatMessage)
         .where(ChatMessage.conversation_id == conversation_id)
