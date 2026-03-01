@@ -682,6 +682,8 @@ class DailyBriefing(Base):
     market_snapshot: Mapped[dict | None] = mapped_column(JsonType)  # SPY, VIX, etc.
     delivered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     delivery_channels: Mapped[list | None] = mapped_column(JsonType)  # ["email", "slack"]
+    edger_synthesis: Mapped[str | None] = mapped_column(Text)  # Edger's daily commentary
+    lesson_taught: Mapped[str | None] = mapped_column(String(200))  # concept taught
 
 
 # ---------------------------------------------------------------------------

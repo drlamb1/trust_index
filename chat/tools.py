@@ -1340,7 +1340,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Generate the complete daily briefing in markdown with all 10 sections.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_full_briefing,
-        personas=["analyst"],
+        personas=["analyst", "edge"],
     ),
     "lookup_ticker": ToolDef(
         name="lookup_ticker",

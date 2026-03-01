@@ -910,8 +910,133 @@ async def generate_and_send_briefing(
         briefing_row.delivered_at = datetime.now(timezone.utc)
         briefing_row.delivery_channels = [ch for ch, ok in delivered.items() if ok]
 
+    # ── Edger synthesis: intelligence layer on top of raw data ──
+    try:
+        synthesis, lesson = await synthesize_briefing_with_edger(
+            content_md, session
+        )
+        briefing_row.edger_synthesis = synthesis
+        briefing_row.lesson_taught = lesson
+
+        # Write to simulation_log so it appears in the agent feed
+        from core.models import SimulationLog
+
+        session.add(SimulationLog(
+            agent_name="edge",
+            event_type="DAILY_BRIEFING",
+            event_data={
+                "date": str(for_date),
+                "lesson_taught": lesson,
+                "synthesis_preview": synthesis[:300] if synthesis else None,
+            },
+        ))
+    except Exception:
+        logger.exception("Edger synthesis failed — raw briefing still saved")
+
     await session.commit()
-    return {"content_md": content_md, "delivered": delivered}
+    return {
+        "content_md": content_md,
+        "edger_synthesis": briefing_row.edger_synthesis,
+        "delivered": delivered,
+    }
+
+
+# ---------------------------------------------------------------------------
+# Edger synthesis — autonomous intelligence commentary
+# ---------------------------------------------------------------------------
+
+
+async def synthesize_briefing_with_edger(
+    raw_briefing_md: str,
+    session: AsyncSession,
+) -> tuple[str, str | None]:
+    """
+    Have The Edger synthesize the raw daily briefing into intelligence.
+
+    Returns (synthesis_text, concept_id_taught_or_None).
+    """
+    import anthropic
+
+    from config.settings import settings
+
+    if not settings.has_anthropic:
+        logger.warning("No ANTHROPIC_API_KEY — skipping Edger synthesis")
+        return ("", None)
+
+    from chat.personas import PERSONAS
+
+    edger = PERSONAS["edge"]
+
+    # Pick an untaught concept to weave into the briefing
+    concept = await _pick_briefing_concept(session)
+    concept_instruction = ""
+    if concept:
+        concept_instruction = (
+            f"\n\nToday's teaching concept: {concept[1]} — {concept[2]}. "
+            f"Weave this into your synthesis naturally, grounded in today's data. "
+            f"Don't announce it as a lesson. Just make it part of the story."
+        )
+
+    synthesis_prompt = (
+        "You're writing today's daily briefing. The crew has gathered the raw "
+        "data below. Your job: synthesize it into what actually matters. Lead "
+        "with the single most important thing. Call out what changed or what's "
+        "building. Flag anything that smells like a signal others will miss. "
+        "Keep it under 500 words. This gets persisted — if someone reads it in "
+        "30 days, it should still make sense."
+        f"{concept_instruction}\n\n"
+        f"--- RAW BRIEFING ---\n{raw_briefing_md[:12000]}"
+    )
+
+    client = anthropic.AsyncAnthropic(api_key=settings.anthropic_api_key)
+    response = await client.messages.create(
+        model="claude-sonnet-4-6",
+        max_tokens=1024,
+        system=edger.system_prompt,
+        messages=[{"role": "user", "content": synthesis_prompt}],
+    )
+    synthesis = response.content[0].text
+
+    # Record the lesson as taught so it won't repeat
+    lesson_id = None
+    if concept:
+        from core.models import AgentMemory
+
+        lesson_id = concept[0]
+        session.add(AgentMemory(
+            agent_name="edge",
+            memory_type="lesson_taught",
+            content=lesson_id,
+            confidence=1.0,
+            evidence={"source": "daily_briefing", "summary": concept[1]},
+        ))
+
+    return (synthesis, lesson_id)
+
+
+async def _pick_briefing_concept(session: AsyncSession) -> tuple | None:
+    """Pick an untaught concept from the library for the daily briefing."""
+    from sqlalchemy import func as sa_func
+
+    from core.models import AgentMemory
+
+    # Get already-taught concept IDs
+    result = await session.execute(
+        select(AgentMemory.content).where(
+            AgentMemory.agent_name == "edge",
+            AgentMemory.memory_type == "lesson_taught",
+        )
+    )
+    taught_ids = {r[0] for r in result.all()}
+
+    # Import the concept library from tools
+    from chat.tools import _CONCEPT_LIBRARY
+
+    untaught = [c for c in _CONCEPT_LIBRARY if c[0] not in taught_ids]
+    if not untaught:
+        untaught = list(_CONCEPT_LIBRARY)  # cycle back
+
+    return untaught[0] if untaught else None
 
 
 # ---------------------------------------------------------------------------
