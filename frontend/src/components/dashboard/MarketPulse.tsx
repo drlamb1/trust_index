@@ -67,7 +67,7 @@ function PulseCard({ label, value, change, direction, entryDelay }: MetricCard) 
 }
 
 export default function MarketPulse() {
-  const { data: cards = [] } = useQuery({
+  const { data: cards = [], isError } = useQuery({
     queryKey: ['macro-pulse'],
     queryFn: macro.pulse,
     refetchInterval: 5 * 60_000, // refresh every 5 min
@@ -105,6 +105,11 @@ export default function MarketPulse() {
       }}>
         Market Pulse
       </h2>
+      {isError && (
+        <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)', marginBottom: 8 }}>
+          Macro data unavailable — will retry automatically.
+        </div>
+      )}
       <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
         {displayCards.map((m) => (
           <PulseCard key={m.label} {...m} />

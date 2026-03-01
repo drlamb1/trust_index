@@ -56,7 +56,7 @@ const SPARKLINE = Array.from({ length: 30 }, (_, i) => ({
 }))
 
 export default function SimulationEngine() {
-  const { data: stats } = useQuery({
+  const { data: stats, isError } = useQuery({
     queryKey: ['simulation-stats'],
     queryFn: simulation.stats,
     refetchInterval: 60_000,
@@ -88,6 +88,12 @@ export default function SimulationEngine() {
         </h2>
         <span className="pill pill-amber">Play Money</span>
       </div>
+
+      {isError && (
+        <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)', marginBottom: 8 }}>
+          Simulation stats unavailable — will retry automatically.
+        </div>
+      )}
 
       {/* 4 stat tiles */}
       <div className="grid grid-cols-2 gap-2" style={{ marginBottom: 16 }}>

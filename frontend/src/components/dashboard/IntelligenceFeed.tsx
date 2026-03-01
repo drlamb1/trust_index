@@ -44,19 +44,28 @@ export default function IntelligenceFeed() {
   const navigate = useNavigate()
   const [items, setItems] = useState<FeedItem[]>([])
   const [connected, setConnected] = useState(false)
+  const [timedOut, setTimedOut] = useState(false)
 
   useEffect(() => {
+    const timeout = setTimeout(() => {
+      setTimedOut(prev => {
+        // Only set if still not connected
+        return !connected ? true : prev
+      })
+    }, 15_000)
+
     const close = createSimulationStream(
       (event) => {
         if ((event as any).type === 'connected') {
           setConnected(true)
+          setTimedOut(false)
           return
         }
         setItems(prev => [event as unknown as FeedItem, ...prev].slice(0, 50))
       },
       () => setConnected(false),
     )
-    return close
+    return () => { close(); clearTimeout(timeout) }
   }, [])
 
   return (
@@ -87,7 +96,7 @@ export default function IntelligenceFeed() {
       <div className="flex flex-col gap-1" style={{ maxHeight: 200, overflowY: 'auto' }}>
         {items.length === 0 && (
           <div style={{ color: 'var(--color-text-dim)', fontSize: 11, padding: '8px 0' }}>
-            {connected ? 'Waiting for agent activity…' : 'Connecting to feed…'}
+            {connected ? 'Waiting for agent activity…' : timedOut ? 'Feed unavailable — backend may be starting up.' : 'Connecting to feed…'}
           </div>
         )}
         {items.map((item, i) => {

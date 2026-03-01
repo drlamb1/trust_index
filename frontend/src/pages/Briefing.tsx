@@ -8,7 +8,7 @@ import { briefing } from '@/lib/api'
 import { RefreshCw } from 'lucide-react'
 
 export default function Briefing() {
-  const { data: markdown, isLoading, refetch, dataUpdatedAt } = useQuery({
+  const { data: markdown, isLoading, isError, refetch, dataUpdatedAt } = useQuery({
     queryKey: ['briefing'],
     queryFn: briefing.markdown,
     staleTime: 5 * 60 * 1000,
@@ -44,6 +44,12 @@ export default function Briefing() {
       {isLoading && (
         <div style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)', fontSize: 12 }}>
           Generating briefing…
+        </div>
+      )}
+
+      {isError && !isLoading && (
+        <div style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)', fontSize: 12 }}>
+          Briefing unavailable — try refreshing.
         </div>
       )}
 
