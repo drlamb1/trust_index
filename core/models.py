@@ -699,7 +699,7 @@ class ChatConversation(Base):
         Integer, ForeignKey("users.id", ondelete="SET NULL")
     )
     title: Mapped[str | None] = mapped_column(String(255))
-    active_persona: Mapped[str] = mapped_column(String(30), default="analyst")
+    active_persona: Mapped[str] = mapped_column(String(30), default="edge")
     message_count: Mapped[int] = mapped_column(Integer, default=0)
     total_input_tokens: Mapped[int] = mapped_column(Integer, default=0)
     total_output_tokens: Mapped[int] = mapped_column(Integer, default=0)

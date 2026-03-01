@@ -70,18 +70,18 @@ def deserialize_sentiment_model(blob: bytes) -> dict[str, Any]:
     tokenizer = None
     if tokenizer_files:
         # Write tokenizer files to a temp dir and load from there
-        tmpdir = tempfile.mkdtemp(prefix="ef_tok_")
-        for fname, fbytes in tokenizer_files.items():
-            fpath = os.path.join(tmpdir, fname)
-            with open(fpath, "wb") as f:
-                f.write(fbytes)
+        with tempfile.TemporaryDirectory(prefix="ef_tok_") as tmpdir:
+            for fname, fbytes in tokenizer_files.items():
+                fpath = os.path.join(tmpdir, fname)
+                with open(fpath, "wb") as f:
+                    f.write(fbytes)
 
-        # Prefer tokenizer.json (fast tokenizer), fall back to vocab-based
-        tok_json = os.path.join(tmpdir, "tokenizer.json")
-        if os.path.exists(tok_json):
-            tokenizer = Tokenizer.from_file(tok_json)
-        else:
-            logger.warning("No tokenizer.json found in blob; trying vocab.txt fallback")
+            # Prefer tokenizer.json (fast tokenizer), fall back to vocab-based
+            tok_json = os.path.join(tmpdir, "tokenizer.json")
+            if os.path.exists(tok_json):
+                tokenizer = Tokenizer.from_file(tok_json)
+            else:
+                logger.warning("No tokenizer.json found in blob; trying vocab.txt fallback")
 
     if tokenizer is None:
         logger.error(

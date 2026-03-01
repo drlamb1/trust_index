@@ -64,4 +64,5 @@ credentials.json
 *.onnx
 *.pt
 *.pkl
+*.npz
 ml/checkpoints/

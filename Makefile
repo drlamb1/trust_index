@@ -32,7 +32,7 @@ help:
 	@echo "    make run                Trigger full daily EOD pipeline"
 	@echo ""
 	@echo "  ── Tests ─────────────────────────────────────────"
-	@echo "    make test               All 368 tests (~20s, no live services)"
+	@echo "    make test               All 510+ tests (~20s, no live services)"
 	@echo "    make test-unit          Unit tests only (~15s)"
 	@echo ""
 	@echo "  ── Data Backfill ─────────────────────────────────"

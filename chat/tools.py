@@ -1282,7 +1282,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             "properties": {"hours": {"type": "integer", "description": "Lookback in hours", "default": 24}},
         },
         execute=_exec_recent_alerts,
-        personas=["analyst", "thesis", "edge"],
+        personas=["analyst", "thesis", "edge", "pm"],
     ),
     "get_top_news": ToolDef(
         name="get_top_news",
@@ -1436,7 +1436,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_macro_indicators,
-        personas=["analyst", "thesis", "edge"],
+        personas=["analyst", "thesis", "edge", "pm"],
     ),
     "get_earnings_calendar": ToolDef(
         name="get_earnings_calendar",
@@ -1497,7 +1497,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get the current paper portfolio state — open positions, P&L attribution by thesis, and portfolio-level metrics. All play-money.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_paper_portfolio,
-        personas=["analyst", "thesis_lord", "edge", "thesis"],
+        personas=["analyst", "thesis_lord", "edge", "thesis", "pm"],
     ),
     "propose_thesis": ToolDef(
         name="propose_thesis",
@@ -1531,7 +1531,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_thesis_lifecycle,
-        personas=["thesis_lord", "post_mortem", "edge", "thesis"],
+        personas=["thesis_lord", "post_mortem", "edge", "thesis", "pm"],
     ),
     "get_simulation_log": ToolDef(
         name="get_simulation_log",
@@ -1545,7 +1545,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_simulation_log,
-        personas=["thesis_lord", "post_mortem"],
+        personas=["thesis_lord", "post_mortem", "pm"],
     ),
     "mutate_thesis": ToolDef(
         name="mutate_thesis",
@@ -1581,7 +1581,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get P&L attribution by thesis — which ideas are driving returns in the paper portfolio.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_performance_attribution,
-        personas=["thesis_lord", "post_mortem", "edge", "thesis"],
+        personas=["thesis_lord", "post_mortem", "edge", "thesis", "pm"],
     ),
     "get_vol_surface": ToolDef(
         name="get_vol_surface",
@@ -1746,7 +1746,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_agent_memories,
-        personas=["post_mortem", "edge", "thesis"],
+        personas=["post_mortem", "edge", "thesis", "pm"],
     ),
     "search_decision_log": ToolDef(
         name="search_decision_log",

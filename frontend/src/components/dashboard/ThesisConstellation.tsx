@@ -140,6 +140,7 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
             if (node.thesis) onThesisSelect?.(node.thesis)
           }}
           onNodeHover={(node: any) => {
+            // fragile: private API — no public accessor for ForceGraph2D canvas
             const el = graphRef.current?.['_canvas'] as HTMLCanvasElement | undefined
             if (el) el.style.cursor = node ? 'pointer' : 'default'
           }}

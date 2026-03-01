@@ -511,12 +511,12 @@ def main() -> None:
         # Extract from database
         import asyncio
 
-        from core.database import async_session_factory
+        from core.database import AsyncSessionLocal
 
         async def _extract() -> pd.DataFrame:
             from ml.sentiment.data import extract_sentiment_training_data
 
-            async with async_session_factory() as session:
+            async with AsyncSessionLocal() as session:
                 return await extract_sentiment_training_data(session)
 
         df = asyncio.run(_extract())

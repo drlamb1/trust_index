@@ -1,7 +1,7 @@
 // Intelligence Feed — SSE-driven narrative alerts
 // Icon encoding type, ticker badge, one-line story, timestamp
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { Zap, AlertTriangle, FileSearch, BarChart2, TrendingDown, Info } from 'lucide-react'
 import { createSimulationStream } from '@/lib/sse'
@@ -45,25 +45,24 @@ export default function IntelligenceFeed() {
   const [items, setItems] = useState<FeedItem[]>([])
   const [connected, setConnected] = useState(false)
   const [timedOut, setTimedOut] = useState(false)
+  const connectedRef = useRef(false)
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      setTimedOut(prev => {
-        // Only set if still not connected
-        return !connected ? true : prev
-      })
+      if (!connectedRef.current) setTimedOut(true)
     }, 15_000)
 
     const close = createSimulationStream(
       (event) => {
         if ((event as any).type === 'connected') {
+          connectedRef.current = true
           setConnected(true)
           setTimedOut(false)
           return
         }
         setItems(prev => [event as unknown as FeedItem, ...prev].slice(0, 50))
       },
-      () => setConnected(false),
+      () => { connectedRef.current = false; setConnected(false) },
     )
     return () => { close(); clearTimeout(timeout) }
   }, [])

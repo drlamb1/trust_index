@@ -13,6 +13,7 @@ consistent shape.
 
 from __future__ import annotations
 
+import hashlib
 import logging
 from typing import Any
 
@@ -110,7 +111,7 @@ def extract_convergence_features(generation_context: dict) -> dict[str, float]:
 
     # --- Sector hash (ordinal encoding) --------------------------------------
     sector = ctx.get("sector", "")
-    sector_hash = float(hash(sector) % 20) if sector else 0.0
+    sector_hash = float(int(hashlib.md5(sector.encode()).hexdigest(), 16) % 20) if sector else 0.0
 
     # --- Assemble feature dict -----------------------------------------------
     features: dict[str, float] = {

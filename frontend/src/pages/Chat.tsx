@@ -11,7 +11,7 @@ import { Send, ChevronDown, ChevronUp, History, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
 import { streamChat } from '@/lib/sse'
-import { getToken, chat as chatApi } from '@/lib/api'
+import { BASE, getToken, chat as chatApi } from '@/lib/api'
 import type { PersonaName, Conversation } from '@/types/api'
 
 // ─── Tool Result Card ───
@@ -250,7 +250,7 @@ export default function Chat() {
     const token = getToken()
     if (token) headers['Authorization'] = `Bearer ${token}`
 
-    fetch(`/api/chat/conversations/${saved}/messages`, { headers })
+    fetch(`${BASE}/api/chat/conversations/${saved}/messages`, { headers })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!data?.messages?.length) { setMessages([]); return }

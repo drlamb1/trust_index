@@ -103,7 +103,7 @@ async def train_deep_hedging_model(
     """
     from sqlalchemy import select
 
-    from core.models import HestonCalibration
+    from core.models import HestonCalibration, PriceBar
 
     # --- 1. Query most recent calibration ---
     result = await session.execute(
@@ -139,8 +139,16 @@ async def train_deep_hedging_model(
         rho=calibration.rho,
     )
 
-    spot = calibration.spot_price if calibration.spot_price else 100.0
-    r = calibration.risk_free_rate if calibration.risk_free_rate else RISK_FREE_RATE_DEFAULT
+    # Fetch latest close price for the calibration's ticker
+    price_result = await session.execute(
+        select(PriceBar.close)
+        .where(PriceBar.ticker_id == calibration.ticker_id)
+        .order_by(PriceBar.date.desc())
+        .limit(1)
+    )
+    latest_close = price_result.scalar_one_or_none()
+    spot = float(latest_close) if latest_close else 100.0
+    r = RISK_FREE_RATE_DEFAULT
     T = 1.0  # 1-year option
 
     logger.info(

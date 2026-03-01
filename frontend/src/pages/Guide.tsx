@@ -6,46 +6,6 @@ import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
 
 const EDGE_COLOR = '#ff4f81'
 
-function PersonaCard({ name }: { name: string }) {
-  const p = PERSONAS[name as keyof typeof PERSONAS]
-  if (!p) return null
-  return (
-    <Link
-      to={`/chat?persona=${name}`}
-      style={{ textDecoration: 'none' }}
-    >
-      <div
-        className="glass-sm"
-        style={{
-          padding: '14px 16px',
-          borderLeft: `3px solid ${p.color}`,
-          cursor: 'pointer',
-          transition: 'background 0.15s',
-        }}
-        onMouseEnter={e => (e.currentTarget.style.background = 'hsl(228 18% 14%)')}
-        onMouseLeave={e => (e.currentTarget.style.background = '')}
-      >
-        <div className="flex items-center gap-2" style={{ marginBottom: 4 }}>
-          <span style={{
-            fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 10,
-            color: p.color, background: p.color + '18',
-            border: `1px solid ${p.color}40`, borderRadius: 5,
-            padding: '1px 6px',
-          }}>
-            {p.icon}
-          </span>
-          <span style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)' }}>
-            {p.display_name}
-          </span>
-        </div>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.4 }}>
-          {p.role}
-        </div>
-      </div>
-    </Link>
-  )
-}
-
 const PERSONA_DESCRIPTIONS: Record<string, string> = {
   edge: 'Your front door. Ask anything — market questions, jargon translation, or "what should I look at today?" Handles 80% of what you need and knows when to send you to a specialist.',
   analyst: 'Pulls real data: SEC filings, price history, technicals, sentiment scores, macro indicators. Ask "what does AAPL look like right now?" and get numbers, not opinions.',
