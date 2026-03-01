@@ -26,12 +26,24 @@ export default function VolSurfaceHeatmap({ ticker }: { ticker: string }) {
 
   const { moneyness, expiries, ivs, atm_iv, skew_25d } = data.surface_data
 
-  // Transform into Nivo HeatMap format
+  // Check if we have any real IV data (non-null, non-zero)
+  const hasRealData = ivs.some(row => row?.some(v => v != null && v > 0))
+
+  if (!hasRealData) {
+    return (
+      <div style={{ color: 'var(--color-text-dim)', fontSize: 11, fontFamily: 'var(--font-sans)', padding: '20px 0', textAlign: 'center' }}>
+        <div style={{ marginBottom: 4 }}>No implied volatility data available for {ticker}.</div>
+        <div style={{ fontSize: 10 }}>Options chain data is needed to build the surface.</div>
+      </div>
+    )
+  }
+
+  // Transform into Nivo HeatMap format — use null for missing cells
   const heatmapData = expiries.map((exp, i) => ({
     id: `${exp}d`,
     data: moneyness.map((m, j) => ({
       x: `${(m * 100).toFixed(0)}%`,
-      y: ivs[i]?.[j] ?? 0,
+      y: ivs[i]?.[j] ?? null,
     })),
   }))
 

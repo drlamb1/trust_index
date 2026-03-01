@@ -91,6 +91,21 @@ export default function MLModelStatus() {
           ))}
         </tbody>
       </table>
+
+      {/* Explain inactive state when no models are active */}
+      {models.every(m => !m.info.active) && (
+        <div style={{
+          marginTop: 12, padding: '10px 12px',
+          background: 'hsl(228 18% 9%)',
+          border: '1px solid var(--color-border)',
+          borderRadius: 6,
+          fontFamily: 'var(--font-sans)', fontSize: 10,
+          color: 'var(--color-text-dim)', lineHeight: 1.6,
+        }}>
+          Models train locally and deploy to Railway for inference.
+          Feature flags <code style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-cyan)' }}>use_local_sentiment_model</code> and <code style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-cyan)' }}>signal_ranker_enabled</code> are off by default.
+        </div>
+      )}
     </div>
   )
 }

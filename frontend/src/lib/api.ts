@@ -120,7 +120,10 @@ export const simulation = {
 // ─── Chat ───
 
 export const chat = {
-  conversations: () => req<Conversation[]>('/api/chat/conversations'),
+  conversations: async (): Promise<Conversation[]> => {
+    const res = await req<{ conversations: Conversation[] }>('/api/chat/conversations')
+    return res.conversations ?? []
+  },
   messages: (id: string) => req<ChatMessage[]>(`/api/chat/conversations/${id}/messages`),
 }
 

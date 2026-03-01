@@ -59,7 +59,7 @@ function LogEntry({ entry }: { entry: SimulationLog }) {
   )
 }
 
-const EVENT_TYPES = ['All', 'thesis_created', 'backtest_complete', 'position_opened', 'position_closed', 'signal_detected', 'thesis_killed']
+const EVENT_TYPES = ['All', 'thesis_created', 'backtest_complete', 'position_opened', 'position_closed', 'signal_detected', 'thesis_killed', 'DAILY_BRIEFING', 'pr_merge', 'BACKTEST_START', 'BACKTEST_COMPLETE']
 
 export default function DecisionLog() {
   const [filter, setFilter] = useState('All')

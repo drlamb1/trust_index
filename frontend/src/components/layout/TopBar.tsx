@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, Bell } from 'lucide-react'
+import { Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { tickers } from '@/lib/api'
@@ -186,15 +186,9 @@ export default function TopBar() {
       {/* Center — clock */}
       <Clock />
 
-      {/* Right — search + bell */}
+      {/* Right — search */}
       <div className="flex items-center gap-3">
         <TickerSearch />
-        <button
-          className="flex items-center justify-center w-8 h-8 rounded-lg transition-colors"
-          style={{ color: 'var(--color-text-dim)', border: '1px solid var(--color-border)', background: 'transparent' }}
-        >
-          <Bell size={14} />
-        </button>
       </div>
     </header>
   )
