@@ -155,7 +155,7 @@ async def get_messages(
     db: AsyncSession = Depends(get_db),
 ) -> JSONResponse:
     from chat.engine import get_conversation_messages
-    msgs = await get_conversation_messages(db, conversation_id)
+    msgs = await get_conversation_messages(db, conversation_id, user_id=user.id)
     return JSONResponse({"messages": msgs})
 
 

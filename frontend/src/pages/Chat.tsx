@@ -203,7 +203,10 @@ interface ChatEntry {
 
 // ─── Main Chat Page ───
 
-const convKey = (persona: PersonaName) => `edgefinder_conv_${persona}`
+const convKey = (persona: PersonaName) => {
+  const uid = useAuthStore.getState().user?.id ?? 0
+  return `edgefinder_conv_${uid}_${persona}`
+}
 
 export default function Chat() {
   const [searchParams] = useSearchParams()
