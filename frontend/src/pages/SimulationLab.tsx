@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
 import VolSurfaceHeatmap from '@/components/simulation/VolSurfaceHeatmap'
+import DecisionLog from '@/components/simulation/DecisionLog'
 import { simulation } from '@/lib/api'
 import type { SimulatedThesis, HestonParams, VolSurface } from '@/types/api'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -250,6 +251,11 @@ export default function SimulationLab() {
         <div className="glass flex-1" style={{ padding: '20px 24px' }}>
           <PaperPortfolioTable />
         </div>
+      </div>
+
+      {/* Decision Log */}
+      <div className="glass" style={{ padding: '20px 24px', marginTop: 16 }}>
+        <DecisionLog />
       </div>
 
       {/* Thesis drawer */}
