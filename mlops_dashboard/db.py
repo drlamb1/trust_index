@@ -2,6 +2,10 @@
 
 Read-only connection to Neon PostgreSQL. All queries return pandas DataFrames.
 Cached with 5-minute TTL via Streamlit's @st.cache_data.
+
+Credentials are resolved in order:
+  1. st.secrets["neon"] (Streamlit Cloud / .streamlit/secrets.toml)
+  2. Environment variables via .env (local dev)
 """
 
 import os
@@ -14,15 +18,29 @@ from dotenv import load_dotenv
 load_dotenv()
 
 
+def _get_secret(key: str, default: str | None = None) -> str:
+    """Resolve a credential from st.secrets first, then env vars."""
+    try:
+        return st.secrets["neon"][key]
+    except (KeyError, FileNotFoundError):
+        val = os.environ.get(key, default)
+        if val is None:
+            raise KeyError(
+                f"Missing credential '{key}'. Set it in .streamlit/secrets.toml "
+                f"under [neon] or as an environment variable."
+            )
+        return val
+
+
 @st.cache_resource
 def get_connection():
     """Return a psycopg2 connection to Neon PostgreSQL."""
     return psycopg2.connect(
-        host=os.environ.get("NEON_HOST", "ep-long-moon-aiq00ucz-pooler.c-4.us-east-1.aws.neon.tech"),
-        port=int(os.environ.get("NEON_PORT", "5432")),
-        user=os.environ.get("NEON_USER", "neondb_owner"),
-        password=os.environ["NEON_PASSWORD"],
-        dbname=os.environ.get("NEON_DB", "neondb"),
+        host=_get_secret("NEON_HOST", "ep-long-moon-aiq00ucz-pooler.c-4.us-east-1.aws.neon.tech"),
+        port=int(_get_secret("NEON_PORT", "5432")),
+        user=_get_secret("NEON_USER", "neondb_owner"),
+        password=_get_secret("NEON_PASSWORD"),
+        dbname=_get_secret("NEON_DB", "neondb"),
         sslmode="require",
     )
 
