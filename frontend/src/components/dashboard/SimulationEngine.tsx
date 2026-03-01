@@ -1,12 +1,8 @@
-// Simulation Engine panel — 4 stats + P&L sparkline + PLAY MONEY badge
-// Stats: SIM P&L (amber), WIN RATE, SHARPE, ACTIVE THESES
-// Sparkline: amber AreaChart, no axes, just the shape
+// Simulation Engine panel — 4 stats + portfolio summary + PLAY MONEY badge
 
 import { useQuery } from '@tanstack/react-query'
 import { DollarSign, Target, TrendingUp, Activity } from 'lucide-react'
-import { AreaChart, Area, ResponsiveContainer } from 'recharts'
 import { simulation } from '@/lib/api'
-import type { SimulationStats } from '@/types/api'
 
 function StatTile({
   icon: Icon,
@@ -49,11 +45,6 @@ function StatTile({
     </div>
   )
 }
-
-// Sparkline data — placeholder until we connect historical P&L API
-const SPARKLINE = Array.from({ length: 30 }, (_, i) => ({
-  v: 100000 + Math.sin(i * 0.4) * 3000 + i * 400 + Math.random() * 1000,
-}))
 
 export default function SimulationEngine() {
   const { data: stats, isError } = useQuery({
@@ -120,27 +111,17 @@ export default function SimulationEngine() {
         />
       </div>
 
-      {/* P&L sparkline — amber, no axes */}
-      <div style={{ height: 64 }}>
-        <ResponsiveContainer width="100%" height="100%">
-          <AreaChart data={SPARKLINE} margin={{ top: 4, right: 0, left: 0, bottom: 0 }}>
-            <defs>
-              <linearGradient id="amberGrad" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="hsl(38 92% 55%)" stopOpacity={0.25} />
-                <stop offset="95%" stopColor="hsl(38 92% 55%)" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <Area
-              type="monotone"
-              dataKey="v"
-              stroke="hsl(38 92% 55%)"
-              strokeWidth={1.5}
-              fill="url(#amberGrad)"
-              dot={false}
-              isAnimationActive={false}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
+      {/* Portfolio summary */}
+      <div className="glass-sm" style={{ padding: '10px 16px' }}>
+        <div style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--color-text-dim)' }}>
+          Portfolio: ${stats?.portfolio?.value?.toLocaleString('en-US', { maximumFractionDigits: 0 }) ?? '—'}
+          {' · '}{stats?.theses?.total ?? 0} theses tracked
+          {pnlPct !== 0 && (
+            <span style={{ color: pnlPct >= 0 ? 'var(--color-amber)' : 'var(--color-danger)', marginLeft: 8 }}>
+              {pnlPct >= 0 ? '+' : ''}{pnlPct.toFixed(1)}%
+            </span>
+          )}
+        </div>
       </div>
     </div>
   )
