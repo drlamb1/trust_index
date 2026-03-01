@@ -1,0 +1,66 @@
+name: Log PR merge
+
+on:
+  pull_request:
+    types: [closed]
+
+jobs:
+  log:
+    if: github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get commit list
+        id: commits
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh pr view ${{ github.event.pull_request.number }} \
+            --repo ${{ github.repository }} \
+            --json commits \
+            --jq '[.commits[].messageHeadline]' > /tmp/commits.json
+
+      - name: Write to simulation_logs
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_TITLE: ${{ github.event.pull_request.title }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          MERGE_SHA: ${{ github.event.pull_request.merge_commit_sha }}
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          BASE_BRANCH: ${{ github.event.pull_request.base.ref }}
+        run: |
+          pip install asyncpg -q
+          python3 - <<'PYEOF'
+          import asyncio, asyncpg, json, os, ssl
+
+          async def main():
+              url = os.environ["DATABASE_URL"].split("?")[0]
+              ctx = ssl.create_default_context()
+              ctx.check_hostname = False
+              ctx.verify_mode = ssl.CERT_NONE
+              conn = await asyncpg.connect(url, ssl=ctx)
+
+              commits = json.load(open("/tmp/commits.json"))
+              event_data = json.dumps({
+                  "pr_number": int(os.environ["PR_NUMBER"]),
+                  "title": os.environ["PR_TITLE"],
+                  "body": (os.environ.get("PR_BODY") or "")[:2000],
+                  "author": os.environ["PR_AUTHOR"],
+                  "merge_sha": os.environ["MERGE_SHA"],
+                  "head_branch": os.environ["HEAD_BRANCH"],
+                  "base_branch": os.environ["BASE_BRANCH"],
+                  "commits": commits,
+              })
+
+              await conn.execute(
+                  """INSERT INTO simulation_logs
+                     (agent_name, event_type, event_data, created_at, updated_at)
+                     VALUES ($1, $2, $3::jsonb, now(), now())""",
+                  "github", "pr_merge", event_data,
+              )
+              await conn.close()
+              print(f"Logged PR #{os.environ['PR_NUMBER']} to simulation_logs")
+
+          asyncio.run(main())
+          PYEOF
