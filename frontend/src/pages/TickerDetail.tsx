@@ -1,6 +1,7 @@
 // Ticker Detail — signal → thesis → backtest trace view
 // Header | Price Chart | Technicals | Theses | Backtests | Alerts
 
+import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
@@ -107,6 +108,9 @@ function ThesisRow({ thesis }: { thesis: SimulatedThesis }) {
 export default function TickerDetail() {
   const { symbol = '' } = useParams<{ symbol: string }>()
   const sym = symbol.toUpperCase()
+  const [alertLimit, setAlertLimit] = useState(30)
+  const [thesisLimit, setThesisLimit] = useState(20)
+  const [backtestLimit, setBacktestLimit] = useState(20)
 
   const { data: summary, isLoading, isError } = useQuery({
     queryKey: ['ticker-summary', sym],
@@ -121,20 +125,20 @@ export default function TickerDetail() {
   })
 
   const { data: alerts = [] } = useQuery({
-    queryKey: ['ticker-alerts', sym],
-    queryFn: () => tickerApi.alerts(sym),
+    queryKey: ['ticker-alerts', sym, alertLimit],
+    queryFn: () => tickerApi.alerts(sym, alertLimit),
     enabled: !!sym,
   })
 
   const { data: theses = [] } = useQuery({
-    queryKey: ['ticker-theses', sym],
-    queryFn: () => tickerApi.theses(sym),
+    queryKey: ['ticker-theses', sym, thesisLimit],
+    queryFn: () => tickerApi.theses(sym, thesisLimit),
     enabled: !!sym,
   })
 
   const { data: backtests = [] } = useQuery({
-    queryKey: ['ticker-backtests', sym],
-    queryFn: () => tickerApi.backtests(sym),
+    queryKey: ['ticker-backtests', sym, backtestLimit],
+    queryFn: () => tickerApi.backtests(sym, backtestLimit),
     enabled: !!sym,
   })
 
@@ -307,7 +311,23 @@ export default function TickerDetail() {
               No theses yet — ask the Thesis Lord to propose one.
             </div>
           ) : (
-            theses.map(t => <ThesisRow key={t.id} thesis={t} />)
+            <>
+              {theses.map(t => <ThesisRow key={t.id} thesis={t} />)}
+              {theses.length >= thesisLimit && (
+                <button
+                  onClick={() => setThesisLimit(l => l + 20)}
+                  style={{
+                    background: 'transparent', border: '1px solid var(--color-border)',
+                    borderRadius: 6, padding: '4px 12px', cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    color: 'var(--color-text-dim)', marginTop: 8,
+                    display: 'block', width: '100%',
+                  }}
+                >
+                  Load more
+                </button>
+              )}
+            </>
           )}
         </div>
 
@@ -320,7 +340,7 @@ export default function TickerDetail() {
             </div>
           ) : (
             <div className="flex flex-col gap-2">
-              {alerts.slice(0, 10).map(a => (
+              {alerts.map(a => (
                 <div key={a.id} className="flex items-start gap-2" style={{ padding: '6px 0', borderBottom: '1px solid var(--color-border)' }}>
                   <AlertTriangle size={12} style={{ color: SEVERITY_COLOR[a.severity] ?? 'var(--color-text-muted)', flexShrink: 0, marginTop: 2 }} />
                   <div style={{ flex: 1, minWidth: 0 }}>
@@ -338,6 +358,19 @@ export default function TickerDetail() {
                   </span>
                 </div>
               ))}
+              {alerts.length >= alertLimit && (
+                <button
+                  onClick={() => setAlertLimit(l => l + 30)}
+                  style={{
+                    background: 'transparent', border: '1px solid var(--color-border)',
+                    borderRadius: 6, padding: '4px 12px', cursor: 'pointer',
+                    fontFamily: 'var(--font-mono)', fontSize: 10,
+                    color: 'var(--color-text-dim)', marginTop: 4,
+                  }}
+                >
+                  Load more
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -393,6 +426,20 @@ export default function TickerDetail() {
               ))}
             </tbody>
           </table>
+          {backtests.length >= backtestLimit && (
+            <button
+              onClick={() => setBacktestLimit(l => l + 20)}
+              style={{
+                background: 'transparent', border: '1px solid var(--color-border)',
+                borderRadius: 6, padding: '4px 12px', cursor: 'pointer',
+                fontFamily: 'var(--font-mono)', fontSize: 10,
+                color: 'var(--color-text-dim)', marginTop: 8,
+                display: 'block', width: '100%',
+              }}
+            >
+              Load more
+            </button>
+          )}
         )}
       </div>
     </div>

@@ -59,13 +59,14 @@ export default function LearningJournal() {
   const [filter, setFilter] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [agentFilter, setAgentFilter] = useState<string>('')
+  const [limit, setLimit] = useState(30)
 
   const { data: memories = [] } = useQuery({
-    queryKey: ['memories', agentFilter, typeFilter],
+    queryKey: ['memories', agentFilter, typeFilter, limit],
     queryFn: () => simulation.memories({
       agent_name: agentFilter || undefined,
       memory_type: typeFilter || undefined,
-      limit: 30,
+      limit,
     }),
     refetchInterval: 60_000,
   })
@@ -122,6 +123,21 @@ export default function LearningJournal() {
         </div>
       )}
       {filtered.map(m => <MemoryCard key={m.id} memory={m} />)}
+
+      {memories.length >= limit && (
+        <button
+          onClick={() => setLimit(l => l + 30)}
+          style={{
+            background: 'transparent', border: '1px solid var(--color-border)',
+            borderRadius: 6, padding: '6px 16px', cursor: 'pointer',
+            fontFamily: 'var(--font-mono)', fontSize: 11,
+            color: 'var(--color-text-dim)', marginTop: 12,
+            display: 'block', width: '100%',
+          }}
+        >
+          Load more
+        </button>
+      )}
     </div>
   )
 }

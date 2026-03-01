@@ -221,6 +221,7 @@ async def api_ticker_alerts(
 @router.get("/api/ticker/{symbol}/theses")
 async def api_ticker_theses(
     symbol: str,
+    limit: int = Query(default=20, le=100),
     user: User = Depends(get_current_user),
 ):
     """SimulatedTheses linked to a ticker."""
@@ -238,7 +239,7 @@ async def api_ticker_theses(
             select(SimulatedThesis)
             .where(SimulatedThesis.ticker_ids.contains([ticker.id]))
             .order_by(desc(SimulatedThesis.created_at))
-            .limit(20)
+            .limit(limit)
         )
         theses = result.scalars().all()
 
@@ -261,6 +262,7 @@ async def api_ticker_theses(
 @router.get("/api/ticker/{symbol}/backtests")
 async def api_ticker_backtests(
     symbol: str,
+    limit: int = Query(default=20, le=100),
     user: User = Depends(get_current_user),
 ):
     """BacktestRun results for a ticker."""
@@ -278,7 +280,7 @@ async def api_ticker_backtests(
             .join(SimulatedThesis, BacktestRun.thesis_id == SimulatedThesis.id)
             .where(BacktestRun.ticker_id == ticker.id)
             .order_by(desc(BacktestRun.ran_at))
-            .limit(20)
+            .limit(limit)
         )
         rows = result.all()
 
