@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
+import VolSurfaceHeatmap from '@/components/simulation/VolSurfaceHeatmap'
 import { simulation } from '@/lib/api'
 import type { SimulatedThesis, HestonParams, VolSurface } from '@/types/api'
 import { ChevronDown, ChevronUp } from 'lucide-react'
@@ -235,6 +236,14 @@ export default function SimulationLab() {
             </select>
           </div>
           <HestonPanel ticker={hestonTicker} />
+        </div>
+
+        {/* Vol Surface */}
+        <div className="glass flex-1" style={{ padding: '20px 24px' }}>
+          <h3 style={{ fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)', marginBottom: 12 }}>
+            Volatility Surface
+          </h3>
+          <VolSurfaceHeatmap ticker={hestonTicker} />
         </div>
 
         {/* Paper Portfolio */}
