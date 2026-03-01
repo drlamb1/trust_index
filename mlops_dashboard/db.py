@@ -110,6 +110,38 @@ def get_backtest_summary() -> pd.DataFrame:
     """)
 
 
+@st.cache_data(ttl=300)
+def get_training_readiness() -> dict:
+    """Check data prerequisites for each model's training task."""
+    # Sentiment: needs >= 2000 news articles with sentiment_score AND price_move_1d
+    sentiment_df = query_df("""
+        SELECT COUNT(*) as count FROM news_articles
+        WHERE sentiment_score IS NOT NULL AND price_move_1d IS NOT NULL
+        AND char_length(title) >= 10
+    """)
+    sentiment_samples = int(sentiment_df.iloc[0]["count"]) if not sentiment_df.empty else 0
+
+    # Signal ranker: needs >= 50 backtested theses with generation_context
+    ranker_df = query_df("""
+        SELECT COUNT(DISTINCT st.id) as count
+        FROM simulated_theses st
+        JOIN backtest_runs br ON st.id = br.thesis_id
+        WHERE st.generation_context IS NOT NULL
+        AND st.status IN ('paper_live', 'killed')
+    """)
+    ranker_samples = int(ranker_df.iloc[0]["count"]) if not ranker_df.empty else 0
+
+    # Deep hedging: needs >= 1 heston calibration
+    heston_df = query_df("SELECT COUNT(*) as count FROM heston_calibrations")
+    heston_count = int(heston_df.iloc[0]["count"]) if not heston_df.empty else 0
+
+    return {
+        "sentiment": {"current": sentiment_samples, "required": 2000},
+        "signal_ranker": {"current": ranker_samples, "required": 50},
+        "deep_hedging": {"current": heston_count, "required": 1},
+    }
+
+
 # ---------------------------------------------------------------------------
 # Model Registry queries
 # ---------------------------------------------------------------------------

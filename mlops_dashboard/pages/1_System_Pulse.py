@@ -23,6 +23,7 @@ from db import (
     get_backtest_summary,
     get_recent_simulation_logs,
     get_thesis_status_counts,
+    get_training_readiness,
 )
 
 st.title("System Pulse")
@@ -125,6 +126,37 @@ with schedule_cols[3]:
     st.caption("Hourly at :10")
     mins_until = (70 - now.minute) % 60
     st.caption(f"~{mins_until}m until next refresh")
+
+# ---------------------------------------------------------------------------
+# Training Data Readiness
+# ---------------------------------------------------------------------------
+st.divider()
+st.subheader("Training Data Readiness")
+
+readiness = get_training_readiness()
+readiness_labels = {
+    "sentiment": "Sentiment (labelled articles)",
+    "signal_ranker": "Signal Ranker (backtested theses)",
+    "deep_hedging": "Deep Hedging (Heston calibrations)",
+}
+
+r_cols = st.columns(3)
+for r_col, mt in zip(r_cols, ["sentiment", "signal_ranker", "deep_hedging"]):
+    with r_col:
+        r = readiness[mt]
+        current = r["current"]
+        required = r["required"]
+        pct = min(current / required, 1.0) if required > 0 else 0
+        ready = current >= required
+
+        color = "#00C851" if ready else "#ff4444" if pct < 0.25 else "#ffbb33"
+        st.markdown(f"**{readiness_labels[mt]}**")
+        st.progress(pct, text=f"{current:,} / {required:,}")
+        if ready:
+            st.caption("Ready to train")
+        else:
+            gap = required - current
+            st.caption(f"Need {gap:,} more")
 
 # ---------------------------------------------------------------------------
 # Recent Activity Feed

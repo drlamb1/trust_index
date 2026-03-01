@@ -66,9 +66,13 @@ if "sslmode=require" in settings.database_url:
 # Celery workers call asyncio.run() per task, which creates and closes event
 # loops. A connection pool bound to one loop becomes invalid in the next task.
 # NullPool creates a fresh connection each time, avoiding stale-loop errors.
-# NullPool required for any Celery process type (worker, simulation-worker, beat)
-# because each task calls asyncio.run(), creating/destroying event loops.
-_is_worker = os.environ.get("PROCESS_TYPE") in ("worker", "simulation-worker", "beat")
+# Detect workers via PROCESS_TYPE (Railway containers) or argv (local `make ml-worker`).
+import sys
+
+_is_worker = (
+    os.environ.get("PROCESS_TYPE") in ("worker", "simulation-worker", "beat")
+    or (len(sys.argv) > 0 and "celery" in sys.argv[0])
+)
 
 _engine_kwargs: dict = {
     "echo": False,
