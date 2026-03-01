@@ -6,6 +6,7 @@ import {
   BookOpen,
   FileText,
   Settings,
+  BookOpenCheck,
   Zap,
 } from 'lucide-react'
 
@@ -60,15 +61,43 @@ export default function Sidebar() {
         ))}
       </div>
 
-      {/* Settings at bottom */}
-      <NavLink
-        to="/settings"
-        title="Settings"
-        className="flex items-center justify-center w-10 h-10 rounded-lg transition-colors"
-        style={{ color: 'var(--color-text-dim)' }}
-      >
-        <Settings size={16} />
-      </NavLink>
+      {/* Bottom group: Guide + Settings */}
+      <div className="flex flex-col gap-1 items-center">
+        <NavLink
+          to="/guide"
+          title="Guide"
+          className="flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-lg transition-colors"
+          style={({ isActive }) => ({
+            color: isActive ? 'var(--color-amber)' : 'var(--color-text-dim)',
+            background: isActive ? 'var(--color-amber-muted)' : 'transparent',
+          })}
+        >
+          <BookOpenCheck size={16} />
+          <span style={{
+            fontFamily: 'var(--font-sans)', fontSize: 8, fontWeight: 600,
+            letterSpacing: '0.02em', textAlign: 'center', lineHeight: 1.2,
+          }}>
+            Guide
+          </span>
+        </NavLink>
+        <NavLink
+          to="/settings"
+          title="Settings"
+          className="flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-lg transition-colors"
+          style={({ isActive }) => ({
+            color: isActive ? 'var(--color-amber)' : 'var(--color-text-dim)',
+            background: isActive ? 'var(--color-amber-muted)' : 'transparent',
+          })}
+        >
+          <Settings size={16} />
+          <span style={{
+            fontFamily: 'var(--font-sans)', fontSize: 8, fontWeight: 600,
+            letterSpacing: '0.02em', textAlign: 'center', lineHeight: 1.2,
+          }}>
+            Settings
+          </span>
+        </NavLink>
+      </div>
     </nav>
   )
 }
