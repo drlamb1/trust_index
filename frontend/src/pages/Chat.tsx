@@ -6,12 +6,13 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
-import { Send, ChevronDown, ChevronUp } from 'lucide-react'
+import { useQuery } from '@tanstack/react-query'
+import { Send, ChevronDown, ChevronUp, History, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
 import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
 import { streamChat } from '@/lib/sse'
-import { getToken } from '@/lib/api'
-import type { PersonaName } from '@/types/api'
+import { getToken, chat as chatApi } from '@/lib/api'
+import type { PersonaName, Conversation } from '@/types/api'
 
 // ─── Tool Result Card ───
 
@@ -211,7 +212,16 @@ export default function Chat() {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
+  const [historyOpen, setHistoryOpen] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  // Conversation history
+  const { data: conversations = [] } = useQuery({
+    queryKey: ['chat-conversations'],
+    queryFn: chatApi.conversations,
+    staleTime: 60_000,
+    enabled: historyOpen,
+  })
 
   // Auto-scroll on new messages
   useEffect(() => {
@@ -391,13 +401,110 @@ export default function Chat() {
     }
   }, [input, isLoading, activePersona, conversationId])
 
+  const handleConvSelect = (conv: Conversation) => {
+    setPersona(conv.active_persona)
+    localStorage.setItem(convKey(conv.active_persona), conv.id)
+    setConversationId(conv.id)
+    setHistoryOpen(false)
+    // The useEffect on activePersona will reload messages
+  }
+
+  const convTimeAgo = (iso: string): string => {
+    const diff = (Date.now() - new Date(iso).getTime()) / 60000
+    if (diff < 60) return `${Math.floor(diff)}m ago`
+    if (diff < 1440) return `${Math.floor(diff / 60)}h ago`
+    return `${Math.floor(diff / 1440)}d ago`
+  }
+
   return (
-    <div className="flex flex-col" style={{ height: 'calc(100vh - 80px)' }}>
+    <div className="flex" style={{ height: 'calc(100vh - 80px)' }}>
+      {/* Conversation history panel */}
+      {historyOpen && (
+        <div
+          className="glass flex flex-col"
+          style={{
+            width: 240, flexShrink: 0, marginRight: 12,
+            padding: '12px', overflowY: 'auto',
+          }}
+        >
+          <div className="flex items-center justify-between" style={{ marginBottom: 12 }}>
+            <span style={{ fontFamily: 'var(--font-sans)', fontSize: 10, fontWeight: 600, letterSpacing: '0.08em', textTransform: 'uppercase', color: 'var(--color-text-muted)' }}>
+              History
+            </span>
+            <button
+              onClick={() => {
+                localStorage.removeItem(convKey(activePersona))
+                setConversationId(null)
+                setMessages([])
+              }}
+              title="New conversation"
+              style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', padding: 2 }}
+            >
+              <Plus size={14} />
+            </button>
+          </div>
+          {conversations.length === 0 && (
+            <div style={{ fontSize: 11, color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)' }}>
+              No conversations yet.
+            </div>
+          )}
+          {conversations.map((conv: Conversation) => {
+            const p = PERSONAS[conv.active_persona]
+            const isActive = conv.id === conversationId
+            return (
+              <button
+                key={conv.id}
+                onClick={() => handleConvSelect(conv)}
+                className="w-full text-left rounded-lg"
+                style={{
+                  padding: '8px 10px', marginBottom: 2,
+                  background: isActive ? 'hsl(228 15% 16%)' : 'transparent',
+                  border: 'none', cursor: 'pointer',
+                  borderLeft: `2px solid ${isActive ? (p?.color ?? 'var(--color-amber)') : 'transparent'}`,
+                }}
+              >
+                <div className="flex items-center gap-2" style={{ marginBottom: 2 }}>
+                  <div style={{
+                    width: 6, height: 6, borderRadius: '50%', flexShrink: 0,
+                    background: p?.color ?? 'var(--color-text-dim)',
+                  }} />
+                  <span style={{
+                    fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-primary)',
+                    overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                  }}>
+                    {conv.title ?? 'Untitled'}
+                  </span>
+                </div>
+                <div style={{ fontFamily: 'var(--font-mono)', fontSize: 9, color: 'var(--color-text-dim)', paddingLeft: 14 }}>
+                  {conv.message_count} msgs · {convTimeAgo(conv.created_at)}
+                </div>
+              </button>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Main chat area */}
+      <div className="flex flex-col flex-1" style={{ minWidth: 0 }}>
       {/* Persona selector */}
       <div
-        className="flex gap-2 pb-4"
+        className="flex gap-2 pb-4 items-center"
         style={{ overflowX: 'auto', flexShrink: 0 }}
       >
+        <button
+          onClick={() => setHistoryOpen(!historyOpen)}
+          title="Conversation history"
+          className="flex items-center justify-center rounded-lg flex-shrink-0"
+          style={{
+            width: 32, height: 32,
+            background: historyOpen ? 'var(--color-amber-muted)' : 'hsl(228 18% 10%)',
+            border: `1px solid ${historyOpen ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+            cursor: 'pointer',
+            color: historyOpen ? 'var(--color-amber)' : 'var(--color-text-dim)',
+          }}
+        >
+          <History size={14} />
+        </button>
         {CHAT_PERSONAS.map(pName => {
           const p = PERSONAS[pName]
           const isActive = activePersona === pName
@@ -510,6 +617,7 @@ export default function Chat() {
           <Send size={13} style={{ color: input.trim() && !isLoading ? '#000' : 'var(--color-amber-dim)' }} />
         </button>
       </div>
-    </div>
+      </div>{/* end main chat area */}
+    </div>{/* end outer flex */}
   )
 }
