@@ -622,7 +622,7 @@ export default function Chat() {
           <Send size={13} style={{ color: input.trim() && !isLoading ? '#000' : 'var(--color-amber-dim)' }} />
         </button>
       </div>
-      </div>{/* end main chat area */}
-    </div>{/* end outer flex */}
+      </div>
+    </div>
   )
 }
