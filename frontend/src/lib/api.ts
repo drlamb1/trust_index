@@ -156,3 +156,9 @@ export const briefing = {
     return res.text()
   },
 }
+
+// ─── ML ───
+
+export const ml = {
+  status: () => req<Record<string, unknown>>('/api/ml/status'),
+}
