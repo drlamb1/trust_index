@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { simulation } from '@/lib/api'
-import { agentColor } from '@/lib/personas'
+import { agentColor, CHAT_PERSONAS, PERSONAS } from '@/lib/personas'
 import type { AgentMemory } from '@/types/api'
 
 const MEMORY_BORDER: Record<string, string> = {
@@ -116,6 +116,42 @@ export default function LearningJournal() {
             {t === '' ? 'All' : t === 'lesson_taught' ? 'lessons' : t}
           </button>
         ))}
+      </div>
+
+      {/* Agent filter pills */}
+      <div className="flex gap-1.5 flex-wrap" style={{ marginBottom: 16 }}>
+        <button
+          onClick={() => setAgentFilter('')}
+          className="pill"
+          style={{
+            cursor: 'pointer', fontSize: 10,
+            background: agentFilter === '' ? 'var(--color-amber-muted)' : 'hsl(228 18% 11%)',
+            color: agentFilter === '' ? 'var(--color-amber)' : 'var(--color-text-dim)',
+            border: `1px solid ${agentFilter === '' ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+          }}
+        >
+          All agents
+        </button>
+        {CHAT_PERSONAS.map(name => {
+          const p = PERSONAS[name]
+          const isActive = agentFilter === name
+          return (
+            <button
+              key={name}
+              onClick={() => setAgentFilter(name)}
+              className="pill"
+              style={{
+                cursor: 'pointer', fontSize: 10,
+                background: isActive ? p.color + '20' : 'hsl(228 18% 11%)',
+                color: isActive ? p.color : 'var(--color-text-dim)',
+                border: `1px solid ${isActive ? p.color + '60' : 'var(--color-border)'}`,
+              }}
+            >
+              <span style={{ marginRight: 3 }}>{p.icon}</span>
+              {p.display_name}
+            </button>
+          )
+        })}
       </div>
 
       {/* Memory cards */}
