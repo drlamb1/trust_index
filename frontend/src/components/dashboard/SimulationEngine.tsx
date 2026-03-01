@@ -10,7 +10,7 @@ function StatTile({
   value,
   accent,
 }: {
-  icon: React.ComponentType<{ size: number }>
+  icon: React.ComponentType<{ size: number; style?: React.CSSProperties }>
   label: string
   value: string
   accent?: boolean
@@ -26,7 +26,7 @@ function StatTile({
           border: `1px solid ${accent ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
         }}
       >
-        <Icon size={14} />
+        <Icon size={14} style={{ color: accent ? 'var(--color-amber)' : 'var(--color-text-dim)' }} />
       </div>
       <div>
         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--color-text-muted)', letterSpacing: '0.05em', textTransform: 'uppercase', fontWeight: 600 }}>

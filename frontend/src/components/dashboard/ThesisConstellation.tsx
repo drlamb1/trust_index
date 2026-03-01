@@ -40,7 +40,7 @@ interface Props {
 }
 
 export default function ThesisConstellation({ onThesisSelect, height = 400 }: Props) {
-  const { data: theses = [] } = useQuery({
+  const { data: theses = [], isError } = useQuery({
     queryKey: ['theses-all'],
     queryFn: () => simulation.theses(),
     refetchInterval: 30_000,
@@ -78,8 +78,8 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
 
   const data = graphData()
 
-  // Empty state
-  if (!theses.length) {
+  // Empty / error state
+  if (!theses.length || isError) {
     return (
       <div
         className="glass animate-entry"
@@ -98,10 +98,9 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
         </div>
         <div
           className="flex items-center justify-center"
-          style={{ height: height - 80, color: 'var(--color-text-dim)', fontSize: 12, textAlign: 'center', lineHeight: 1.6 }}
+          style={{ height: height - 80, color: isError ? 'var(--color-danger)' : 'var(--color-text-dim)', fontSize: 12, textAlign: 'center', lineHeight: 1.6 }}
         >
-          No theses yet.<br />
-          Ask the Thesis Lord to generate one.
+          {isError ? 'Failed to load theses — backend may be starting up.' : <>No theses yet.<br />Ask the Thesis Lord to generate one.</>}
         </div>
       </div>
     )

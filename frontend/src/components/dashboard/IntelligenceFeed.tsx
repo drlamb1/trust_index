@@ -78,7 +78,7 @@ export default function IntelligenceFeed() {
           />
         </div>
         <Link
-          to="/journal"
+          to="/simulation"
           style={{ fontSize: 11, color: 'var(--color-amber)', textDecoration: 'none', fontFamily: 'var(--font-sans)' }}
         >
           View all →

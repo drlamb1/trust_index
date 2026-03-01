@@ -19,6 +19,9 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
       label: 'Chat with The Edger',
       desc: 'Tell me what you\'re curious about. I\'ll handle the rest.',
       color: EDGE_COLOR,
+      bg: EDGE_COLOR + '18',
+      borderColor: EDGE_COLOR + '40',
+      hoverBorder: EDGE_COLOR + '60',
       onClick: () => {
         onDismiss()
         navigate('/chat?persona=edge')
@@ -29,6 +32,9 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
       label: 'Explore the Dashboard',
       desc: 'Dive right in. Click the glowing dots.',
       color: 'var(--color-amber)',
+      bg: 'var(--color-amber-muted)',
+      borderColor: 'var(--color-amber-dim)',
+      hoverBorder: 'var(--color-amber-dim)',
       onClick: onDismiss,
     },
     {
@@ -36,6 +42,9 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
       label: 'Read the Guide',
       desc: 'Meet all 9 personas and see what they do.',
       color: 'var(--color-cyan)',
+      bg: 'hsl(185 72% 48% / 0.1)',
+      borderColor: 'hsl(185 72% 48% / 0.25)',
+      hoverBorder: 'hsl(185 72% 48% / 0.4)',
       onClick: () => {
         onDismiss()
         navigate('/guide')
@@ -86,7 +95,7 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
 
         {/* Action cards */}
         <div className="flex flex-col gap-2" style={{ marginBottom: 20 }}>
-          {actions.map(({ icon: Icon, label, desc, color, onClick }) => (
+          {actions.map(({ icon: Icon, label, desc, color, bg, borderColor, hoverBorder, onClick }) => (
             <button
               key={label}
               onClick={onClick}
@@ -98,18 +107,18 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
                 cursor: 'pointer', width: '100%', textAlign: 'left',
                 transition: 'border-color 0.15s',
               }}
-              onMouseEnter={e => (e.currentTarget.style.borderColor = typeof color === 'string' && color.startsWith('#') ? color + '60' : 'var(--color-amber-dim)')}
+              onMouseEnter={e => (e.currentTarget.style.borderColor = hoverBorder)}
               onMouseLeave={e => (e.currentTarget.style.borderColor = 'var(--color-border)')}
             >
               <div
                 className="flex items-center justify-center rounded-lg flex-shrink-0"
                 style={{
                   width: 32, height: 32,
-                  background: typeof color === 'string' && color.startsWith('#') ? color + '18' : 'var(--color-amber-muted)',
-                  border: `1px solid ${typeof color === 'string' && color.startsWith('#') ? color + '40' : 'var(--color-amber-dim)'}`,
+                  background: bg,
+                  border: `1px solid ${borderColor}`,
                 }}
               >
-                <Icon size={14} style={{ color: typeof color === 'string' && color.startsWith('#') ? color : 'var(--color-amber)' }} />
+                <Icon size={14} style={{ color }} />
               </div>
               <div>
                 <div style={{ fontFamily: 'var(--font-sans)', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 2 }}>

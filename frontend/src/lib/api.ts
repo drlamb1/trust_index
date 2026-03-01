@@ -124,7 +124,10 @@ export const chat = {
     const res = await req<{ conversations: Conversation[] }>('/api/chat/conversations')
     return res.conversations ?? []
   },
-  messages: (id: string) => req<ChatMessage[]>(`/api/chat/conversations/${id}/messages`),
+  messages: async (id: string): Promise<ChatMessage[]> => {
+    const res = await req<{ messages: ChatMessage[] }>(`/api/chat/conversations/${id}/messages`)
+    return res.messages ?? []
+  },
 }
 
 // ─── Macro ───

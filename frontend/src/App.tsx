@@ -47,6 +47,7 @@ export default function App() {
                     <Route path="/tickers/:symbol" element={<TickerDetail />} />
                     <Route path="/guide" element={<Guide />} />
                     <Route path="/settings" element={<Settings />} />
+                    <Route path="*" element={<Navigate to="/" replace />} />
                   </Routes>
                 </Layout>
               </RequireAuth>

@@ -26,7 +26,7 @@ export const useAuthStore = create<AuthState>()(
     }),
     {
       name: 'ef-auth',
-      storage: createJSONStorage(() => sessionStorage),
+      storage: createJSONStorage(() => localStorage),
       // Only persist persona preference and auth state, not full user object
       partialize: (state) => ({
         isAuthenticated: state.isAuthenticated,

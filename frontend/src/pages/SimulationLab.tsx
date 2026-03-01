@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import { useNavigate } from 'react-router-dom'
 import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
 import VolSurfaceHeatmap from '@/components/simulation/VolSurfaceHeatmap'
 import DecisionLog from '@/components/simulation/DecisionLog'
@@ -77,6 +78,7 @@ function HestonPanel({ ticker }: { ticker: string }) {
 // ─── Thesis Drawer ───
 
 function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: () => void }) {
+  const navigate = useNavigate()
   const STATUS_COLOR: Record<string, string> = {
     proposed: 'var(--color-text-muted)',
     backtesting: 'var(--color-amber)',
@@ -139,6 +141,32 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
           ))}
         </div>
       )}
+
+      {/* CTAs */}
+      <div className="flex gap-2" style={{ marginTop: 16 }}>
+        {thesis.ticker_symbol && (
+          <button
+            onClick={() => navigate(`/tickers/${thesis.ticker_symbol}`)}
+            style={{
+              flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+              background: 'var(--color-amber-muted)', border: '1px solid var(--color-amber-dim)',
+              color: 'var(--color-amber)', fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600,
+            }}
+          >
+            View {thesis.ticker_symbol}
+          </button>
+        )}
+        <button
+          onClick={() => navigate(`/chat?persona=thesis_lord&message=${encodeURIComponent(`What's the status of thesis "${thesis.name}" (ID ${thesis.id})? Full picture.`)}`)}
+          style={{
+            flex: 1, padding: '8px 12px', borderRadius: 6, cursor: 'pointer',
+            background: 'hsl(228 15% 14%)', border: '1px solid var(--color-border)',
+            color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)', fontSize: 11, fontWeight: 600,
+          }}
+        >
+          Open in Chat
+        </button>
+      </div>
     </div>
   )
 }
@@ -146,11 +174,18 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
 // ─── Portfolio Table ───
 
 function PaperPortfolioTable() {
-  const { data } = useQuery({
+  const { data, isLoading, isError } = useQuery({
     queryKey: ['portfolio'],
     queryFn: simulation.portfolio,
     refetchInterval: 30_000,
   })
+
+  if (isLoading) return (
+    <div style={{ color: 'var(--color-text-dim)', fontSize: 11, fontFamily: 'var(--font-sans)' }}>Loading portfolio…</div>
+  )
+  if (isError) return (
+    <div style={{ color: 'var(--color-danger)', fontSize: 11, fontFamily: 'var(--font-sans)' }}>Failed to load portfolio.</div>
+  )
 
   return (
     <div>
@@ -235,7 +270,8 @@ export default function SimulationLab() {
                 outline: 'none', cursor: 'pointer',
               }}
             >
-              {['NVDA', 'MSFT', 'AAPL', 'AMZN', 'META', 'GOOGL'].map(t => (
+              {/* Common tickers + whatever the user typed */}
+              {Array.from(new Set(['NVDA', 'MSFT', 'AAPL', 'AMZN', 'META', 'GOOGL', 'TSLA', 'SPY', 'QQQ', 'RKLB', hestonTicker])).sort().map(t => (
                 <option key={t} value={t}>{t}</option>
               ))}
             </select>

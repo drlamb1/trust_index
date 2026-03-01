@@ -400,7 +400,7 @@ export default function TickerDetail() {
               {backtests.map(bt => (
                 <tr key={bt.id}>
                   <td style={{ padding: '6px 8px', fontFamily: 'var(--font-sans)', color: 'var(--color-text-muted)', borderBottom: '1px solid var(--color-border)', maxWidth: 180, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {(bt as any).thesis_name ?? `#${bt.thesis_id}`}
+                    {bt.thesis_name ?? `#${bt.thesis_id}`}
                   </td>
                   <td style={{ padding: '6px 8px', fontFamily: 'var(--font-mono)', color: bt.sharpe != null && bt.sharpe > 1 ? 'var(--color-success)' : 'var(--color-text-primary)', borderBottom: '1px solid var(--color-border)' }}>
                     {fmt(bt.sharpe)}

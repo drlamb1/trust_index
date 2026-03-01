@@ -118,6 +118,7 @@ export interface BacktestRun {
   id: number
   thesis_id: number
   ticker_id: number
+  thesis_name?: string | null
   start_date: string
   end_date: string
   sharpe: number | null

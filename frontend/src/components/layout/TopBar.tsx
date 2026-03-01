@@ -17,10 +17,12 @@ function Clock() {
     hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
   })
 
-  // Simple market hours check (ET Mon-Fri 9:30-16:00)
-  const day = time.getDay()
-  const hours = time.getUTCHours() * 60 + time.getUTCMinutes()
-  const marketOpen = day >= 1 && day <= 5 && hours >= 870 && hours < 1200 // 14:30-20:00 UTC
+  // Market hours in ET (Mon-Fri 9:30-16:00)
+  // Convert to ET properly — handles EST/EDT automatically
+  const et = new Date(time.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+  const etDay = et.getDay()
+  const etMinutes = et.getHours() * 60 + et.getMinutes()
+  const marketOpen = etDay >= 1 && etDay <= 5 && etMinutes >= 570 && etMinutes < 960 // 9:30-16:00 ET
 
   return (
     <div className="flex items-center gap-2" style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
