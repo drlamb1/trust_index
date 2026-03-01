@@ -1,10 +1,14 @@
-# EdgeFinder — PM Architecture Brief
+{# PM Architecture Brief — Jinja2 template, rendered at chat-turn time.
+   Static sections describe HOW things work (update on deploy).
+   {{ variables }} pull live state from the database (no deploy needed). #}
+# EdgeFinder — PM Architecture Brief (live)
 
-> This document is injected into the PM persona's system prompt. Keep it
-> concise (under 120 lines). Update it when architecture changes ship.
-> Live stats (ticker counts, thesis counts) come from the
-> `list_available_capabilities` tool — this doc covers HOW things work,
-> not how many there are.
+## Platform Snapshot
+
+- **Active tickers**: {{ active_tickers }} · **Simulated theses**: {{ thesis_count }} · **Backtest runs**: {{ backtest_count }} · **Paper portfolios**: {{ portfolio_count }}
+- **Chat messages (all time)**: {{ chat_message_count }} · **Conversations**: {{ conversation_count }}
+- **Feature requests**: {{ fr_count }} ({{ fr_open }} open)
+- **Simulation log entries**: {{ sim_log_count }}
 
 ## Deployment Topology
 
@@ -13,13 +17,13 @@
   - `edgefinder-worker` — Celery with embedded Beat scheduler, 5 queues
   - `edgefinder-simulation` — Celery worker, dedicated simulation queue
 - **Frontend**: React 19 + TypeScript + Vite on **Vercel** (`trust-index-cyan.vercel.app`)
-- **Database**: Neon PostgreSQL (serverless), 33 tables, asyncpg
+- **Database**: Neon PostgreSQL (serverless), asyncpg
 - **Cache/Broker**: Upstash Redis (serverless)
 - **Single Dockerfile** — `entrypoint.sh` dispatches via `PROCESS_TYPE` env var
 
 ## Data Pipeline
 
-Seven sources flow through ingestion → PostgreSQL → analysis → output:
+Eight sources flow through ingestion → PostgreSQL → analysis → output:
 
 | Source | Cadence | What it produces |
 |--------|---------|-----------------|
@@ -32,7 +36,7 @@ Seven sources flow through ingestion → PostgreSQL → analysis → output:
 | FRED | Daily | MacroIndicators (Fed funds, 10Y, 2Y, unemployment, CPI) |
 | Polygon/yfinance | Daily after close | OptionsChains → vol surface fitting |
 
-40 Celery tasks across 6 queues: ingestion, analysis, alerts, delivery, simulation, ml_training.
+{{ celery_task_count }} Celery tasks across 6 queues: ingestion, analysis, alerts, delivery, simulation, ml_training.
 
 ## Simulation Engine
 
@@ -63,21 +67,14 @@ Weekly retraining schedule: Sun 2-4 AM. Quality gates enforced (sentiment ≥55%
 
 ## Chat System
 
-9 personas with distinct system prompts, tool access, and personality:
+{{ persona_count }} personas with distinct system prompts, tool access, and personality:
 
-| Persona | Domain | Tools |
-|---------|--------|-------|
-| The Edger | Concierge, teaching, cross-domain synthesis | 23 |
-| The Analyst | Data-driven market analysis | 21 |
-| The Thesis Genius | Contrarian strategy, frameworks | 16 |
-| The PM (you) | Product vision, system visibility, feature strategy | 11 |
-| The Thesis Lord | Autonomous thesis lifecycle | 19 |
-| Vol Slayer | IV surfaces, skew, options pricing | 7 |
-| Heston Cal. | Stochastic vol modeling and teaching | 7 |
-| Deep Hedge | Neural hedging concepts | 3 |
-| Post-Mortem | Forensic thesis analysis, agent memory | 7 |
-
-47 total chat tools. SSE streaming. Persistent conversation history (per-user isolated). 4-tier routing: prefix → keyword → Haiku → default to Edger.
+| Persona | Tools |
+|---------|-------|
+{% for p in personas -%}
+| {{ p.name }} | {{ p.tools }} |
+{% endfor %}
+{{ tool_count }} total chat tools. SSE streaming. Persistent conversation history (per-user isolated). 4-tier routing: prefix → keyword → Haiku → default to Edger.
 
 ## Frontend Pages
 
@@ -85,7 +82,7 @@ Weekly retraining schedule: Sun 2-4 AM. Quality gates enforced (sentiment ≥55%
 |-------|-------------|
 | `/` (Dashboard) | Market pulse (live FRED), thesis constellation, intelligence feed |
 | `/simulation` | Backtest results, vol surface heatmap, decision log, ML model status, deep hedging |
-| `/chat` | 9-persona tabbed chat with SSE streaming, conversation history panel |
+| `/chat` | {{ persona_count }}-persona tabbed chat with SSE streaming, conversation history panel |
 | `/briefing` | Daily briefing with Edger synthesis (teaches one concept per briefing) |
 | `/tickers/:symbol` | Price chart, technicals, theses, backtests, alerts for any ticker |
 | `/journal` | Agent memories and pattern learning |
@@ -97,25 +94,24 @@ Auth: JWT + bcrypt. Roles: admin, member, viewer. Welcome overlay on first visit
 ## Current Phase & Roadmap
 
 **Completed (Phases 1-5):**
-- Full data pipeline (7 sources, S&P 500 universe, weekly auto-sync)
+- Full data pipeline (8 sources, S&P 500 universe, weekly auto-sync)
 - Simulation engine (Heston, BSM, backtester, paper portfolio)
-- 9-persona chat with 47 tools and agentic tool-use loop
+- {{ persona_count }}-persona chat with {{ tool_count }} tools and agentic tool-use loop
 - ML pipeline infrastructure (train/deploy/registry)
 - Frontend SPA on Vercel with all pages wired
 - Persona identity rewrite (Edger v2, PM v2)
 - Daily briefing with Edger teaching synthesis
-- UX audit overhaul (14 commits: onboarding, settings, search, error states)
+- UX audit overhaul (onboarding, settings, search, error states)
+- Chat user isolation (per-user conversation scoping)
 
 **Current priorities:**
-1. Price backfill for ~494 new tickers (S&P 500 expansion from original 11)
+1. Price backfill for newly added tickers (S&P 500 expansion)
 2. Options data collection (Polygon API key live, fetching at market close)
 3. First ML training runs (need ≥2000 news articles for sentiment, ≥50 theses for ranker)
 4. Deep hedging PyTorch integration
-5. Cross-agent session context (FR-14 — personas can't see each other's conversations)
+5. Cross-agent session context (personas can't see each other's conversations yet)
 
 **Known gaps:**
-- Insider signal dimension may still score zero for tickers without Form 4 data
+- Insider signal dimension may score zero for tickers without Form 4 data
 - Feature request registry lags behind what engineering ships — no auto-sync yet
-- `list_available_capabilities` now queries live DB stats but the descriptions list is still manually maintained
-- ARCHITECTURE.md has stale numbers in places (says 8 personas, 44 tools — should be 9/47)
 - No real-time event processing yet (all batch via Celery Beat)

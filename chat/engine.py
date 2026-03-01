@@ -20,29 +20,93 @@ from typing import Any
 
 import functools
 import pathlib
+import time
 
 import anthropic
-from sqlalchemy import select, update
+import jinja2
+from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chat.personas import get_persona
+from chat.personas import PERSONAS as PERSONA_CONFIGS, get_persona
 from chat.router import route_message
-from chat.tools import execute_tool, get_tools_for_persona
-from core.models import ChatConversation, ChatMessage
+from chat.tools import TOOL_REGISTRY, execute_tool, get_tools_for_persona
+from core.models import (
+    ChatConversation,
+    ChatMessage,
+    FeatureRequest,
+    SimulatedThesis,
+    BacktestRun,
+    PaperPortfolio,
+    SimulationLog,
+    Ticker,
+)
 
 logger = logging.getLogger(__name__)
 
 MAX_TOOL_ROUNDS = 5
+CONTEXT_WINDOW = 20  # max messages to include in context
+
+# PM brief template — load once, render per turn with live data
+_PM_BRIEF_TEMPLATE_PATH = pathlib.Path(__file__).resolve().parent.parent / "docs" / "pm_brief.md.j2"
+
+_pm_brief_cache: dict[str, Any] = {"text": "", "ts": 0.0}
+_PM_BRIEF_TTL = 300  # 5 minutes
 
 
 @functools.lru_cache(maxsize=1)
-def _load_pm_brief() -> str:
-    """Load the PM architecture brief (cached for process lifetime)."""
-    path = pathlib.Path(__file__).resolve().parent.parent / "docs" / "pm_brief.md"
-    if path.exists():
-        return path.read_text()
-    return ""
-CONTEXT_WINDOW = 20  # max messages to include in context
+def _load_pm_template() -> jinja2.Template | None:
+    if _PM_BRIEF_TEMPLATE_PATH.exists():
+        return jinja2.Template(_PM_BRIEF_TEMPLATE_PATH.read_text())
+    return None
+
+
+async def _render_pm_brief(session: AsyncSession) -> str:
+    """Render the PM brief template with live DB stats. Cached for 5 min."""
+    now = time.monotonic()
+    if _pm_brief_cache["text"] and (now - _pm_brief_cache["ts"]) < _PM_BRIEF_TTL:
+        return _pm_brief_cache["text"]
+
+    tmpl = _load_pm_template()
+    if not tmpl:
+        return ""
+
+    # Parallel-ish queries (SQLAlchemy batches on same connection)
+    active_tickers = (await session.execute(select(func.count(Ticker.id)).where(Ticker.is_active.is_(True)))).scalar() or 0
+    thesis_count = (await session.execute(select(func.count(SimulatedThesis.id)))).scalar() or 0
+    backtest_count = (await session.execute(select(func.count(BacktestRun.id)))).scalar() or 0
+    portfolio_count = (await session.execute(select(func.count(PaperPortfolio.id)))).scalar() or 0
+    chat_message_count = (await session.execute(select(func.count(ChatMessage.id)))).scalar() or 0
+    conversation_count = (await session.execute(select(func.count(ChatConversation.id)))).scalar() or 0
+    sim_log_count = (await session.execute(select(func.count(SimulationLog.id)))).scalar() or 0
+    fr_count = (await session.execute(select(func.count(FeatureRequest.id)))).scalar() or 0
+    fr_open = (await session.execute(
+        select(func.count(FeatureRequest.id)).where(FeatureRequest.status.in_(["captured", "reviewed"]))
+    )).scalar() or 0
+
+    personas = [
+        {"name": p.display_name, "tools": len(p.tools)}
+        for p in PERSONA_CONFIGS.values()
+    ]
+
+    rendered = tmpl.render(
+        active_tickers=active_tickers,
+        thesis_count=thesis_count,
+        backtest_count=backtest_count,
+        portfolio_count=portfolio_count,
+        chat_message_count=chat_message_count,
+        conversation_count=conversation_count,
+        sim_log_count=sim_log_count,
+        fr_count=fr_count,
+        fr_open=fr_open,
+        persona_count=len(PERSONA_CONFIGS),
+        personas=personas,
+        tool_count=len(TOOL_REGISTRY),
+        celery_task_count=40,  # from scheduler/tasks.py — stable enough to hardcode
+    )
+
+    _pm_brief_cache["text"] = rendered
+    _pm_brief_cache["ts"] = now
+    return rendered
 MAX_TOKENS = 8192
 
 
@@ -315,7 +379,7 @@ async def chat_turn(
             )
 
         if persona_name == "pm":
-            pm_brief = _load_pm_brief()
+            pm_brief = await _render_pm_brief(session)
             if pm_brief:
                 system_text += f"\n\n{pm_brief}"
 
