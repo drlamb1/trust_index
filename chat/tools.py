@@ -351,7 +351,7 @@ async def _exec_list_capabilities(session: AsyncSession, params: dict) -> dict:
 
     # Live persona and tool counts
     personas = [
-        {"name": p.display_name, "role": p.role}
+        {"name": p.display_name, "tools": len(p.tools)}
         for p in PERSONA_CONFIGS.values()
     ]
     tool_count = len(TOOL_REGISTRY)
