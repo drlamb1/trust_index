@@ -277,6 +277,12 @@ async def fetch_and_store_insider_trades(
         if existing.scalar_one_or_none():
             continue
 
+        # SEC EDGAR returns primaryDocument paths with XSLT prefixes like
+        # "xslF345X05/wk-form4_xxx.xml" — this URL serves rendered HTML, not
+        # raw XML.  Strip the prefix to get the actual XML filename.
+        import posixpath
+
+        primary_doc = posixpath.basename(primary_doc)
         url = build_filing_url(ticker.cik, accession_no, primary_doc)
         try:
             xml = await client.get_text(url)

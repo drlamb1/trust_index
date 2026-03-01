@@ -673,10 +673,10 @@ def task_aggregate_news(days: int = 7) -> dict:
 
 @celery_app.task(name="scheduler.tasks.task_fetch_insider_trades")
 def task_fetch_insider_trades(limit_per_ticker: int = 20) -> dict:
-    """Fetch Form 4 insider trades for all watchlist tickers."""
+    """Fetch Form 4 insider trades for watchlist + S&P 500 tickers."""
 
     async def _run():
-        from sqlalchemy import select
+        from sqlalchemy import or_, select
 
         from core.database import AsyncSessionLocal
         from core.models import Ticker
@@ -685,7 +685,10 @@ def task_fetch_insider_trades(limit_per_ticker: int = 20) -> dict:
 
         async with AsyncSessionLocal() as session:
             result = await session.execute(
-                select(Ticker).where(Ticker.is_active.is_(True), Ticker.in_watchlist.is_(True))
+                select(Ticker).where(
+                    Ticker.is_active.is_(True),
+                    or_(Ticker.in_watchlist.is_(True), Ticker.in_sp500.is_(True)),
+                )
             )
             tickers = result.scalars().all()
 
