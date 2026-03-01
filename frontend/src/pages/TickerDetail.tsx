@@ -385,6 +385,7 @@ export default function TickerDetail() {
             <Link to="/chat" style={{ color: 'var(--color-amber)' }}>Agent Chat</Link>.
           </div>
         ) : (
+          <>
           <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
             <thead>
               <tr>
@@ -440,6 +441,7 @@ export default function TickerDetail() {
               Load more
             </button>
           )}
+          </>
         )}
       </div>
     </div>
