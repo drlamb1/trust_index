@@ -432,6 +432,7 @@ def task_fetch_prices_batch(days: int = 1) -> dict:
             result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
             results = await fetch_and_store_prices_batch(session, list(tickers), days=days)
+            await session.commit()
             return {"total_tickers": len(tickers), "results": results}
 
     try:
