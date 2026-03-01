@@ -69,6 +69,7 @@ export default function Settings() {
             { label: 'Email', value: user?.email },
             { label: 'Username', value: user?.username },
             { label: 'Role', value: user?.role },
+            { label: 'Token Budget', value: user?.daily_token_budget != null ? `${(user.tokens_used_today ?? 0).toLocaleString()} / ${user.daily_token_budget.toLocaleString()}` : undefined },
           ].map(({ label, value }) => (
             <div key={label} className="flex items-center justify-between" style={{ padding: '4px 0' }}>
               <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>

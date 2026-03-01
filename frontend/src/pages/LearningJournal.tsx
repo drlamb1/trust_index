@@ -63,7 +63,7 @@ export default function LearningJournal() {
   const [agentFilter, setAgentFilter] = useState<string>('')
   const [limit, setLimit] = useState(30)
 
-  const { data: memories = [] } = useQuery({
+  const { data: memories = [], isError } = useQuery({
     queryKey: ['memories', agentFilter, typeFilter, limit],
     queryFn: () => simulation.memories({
       agent_name: agentFilter || undefined,
@@ -155,7 +155,12 @@ export default function LearningJournal() {
       </div>
 
       {/* Memory cards */}
-      {filtered.length === 0 && (
+      {isError && (
+        <div style={{ color: 'var(--color-danger)', fontSize: 12, fontFamily: 'var(--font-sans)', padding: '40px 0', textAlign: 'center' }}>
+          Failed to load memories — backend may be starting up.
+        </div>
+      )}
+      {!isError && filtered.length === 0 && (
         <div style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)', padding: '40px 0', textAlign: 'center' }}>
           No memories yet. The Post-Mortem Priest consolidates lessons weekly from simulation activity.
         </div>

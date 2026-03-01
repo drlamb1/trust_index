@@ -83,9 +83,10 @@ export default function DecisionLog() {
             onClick={() => setFilter(t)}
             className="pill"
             style={{
-              cursor: 'pointer', border: 'none',
+              cursor: 'pointer',
               background: filter === t ? 'var(--color-amber-muted)' : 'hsl(228 15% 14%)',
               color: filter === t ? 'var(--color-amber)' : 'var(--color-text-dim)',
+              border: `1px solid ${filter === t ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
             }}
           >
             {t === 'All' ? 'All' : t.replace(/_/g, ' ')}

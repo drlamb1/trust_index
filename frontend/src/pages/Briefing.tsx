@@ -41,17 +41,22 @@ const LEVEL_COLOR: Record<string, string> = {
 
 export default function Briefing() {
   const navigate = useNavigate()
-  const { data: markdown, isLoading, isError, refetch, dataUpdatedAt } = useQuery({
-    queryKey: ['briefing'],
-    queryFn: briefing.markdown,
-    staleTime: 5 * 60 * 1000,
-  })
-
-  const { data: latest } = useQuery({
+  const { data: latest, isLoading: latestLoading } = useQuery({
     queryKey: ['briefing-latest'],
     queryFn: briefing.latest,
     staleTime: 5 * 60 * 1000,
   })
+
+  // Prefer API content_md over static .md file
+  const { data: staticMd, isLoading: mdLoading, isError, refetch, dataUpdatedAt } = useQuery({
+    queryKey: ['briefing'],
+    queryFn: briefing.markdown,
+    staleTime: 5 * 60 * 1000,
+    enabled: !latest?.content_md, // skip static fetch if API has content
+  })
+
+  const markdown = latest?.content_md ?? staticMd
+  const isLoading = latestLoading || mdLoading
 
   const [synthOpen, setSynthOpen] = useState(true)
 

@@ -409,11 +409,35 @@ export default function Chat() {
   }, [input, isLoading, activePersona, conversationId])
 
   const handleConvSelect = (conv: Conversation) => {
-    setPersona(conv.active_persona)
     localStorage.setItem(convKey(conv.active_persona), conv.id)
-    setConversationId(conv.id)
     setHistoryOpen(false)
-    // The useEffect on activePersona will reload messages
+    if (conv.active_persona === activePersona) {
+      // Same persona — useEffect won't fire, reload manually
+      setConversationId(conv.id)
+      setIsLoadingHistory(true)
+      const headers: Record<string, string> = {}
+      const token = getToken()
+      if (token) headers['Authorization'] = `Bearer ${token}`
+      fetch(`${BASE}/api/chat/conversations/${conv.id}/messages`, { headers })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          const msgs = data?.messages ?? (Array.isArray(data) ? data : [])
+          const restored: ChatEntry[] = []
+          for (const msg of msgs) {
+            if (msg.role === 'user') {
+              restored.push({ id: `u-${msg.id}`, role: 'user', parts: [{ type: 'text', text: msg.content ?? '' }] })
+            } else if (msg.role === 'assistant') {
+              restored.push({ id: `a-${msg.id}`, role: 'assistant', parts: [{ type: 'text', text: msg.content ?? '' }], persona: (msg.persona as PersonaName) ?? undefined })
+            }
+          }
+          setMessages(restored)
+        })
+        .catch(() => setMessages([]))
+        .finally(() => setIsLoadingHistory(false))
+    } else {
+      // Different persona — useEffect on activePersona will reload
+      setPersona(conv.active_persona)
+    }
   }
 
 
@@ -439,6 +463,7 @@ export default function Chat() {
                 setMessages([])
               }}
               title="New conversation"
+              aria-label="New conversation"
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', padding: 2 }}
             >
               <Plus size={14} />
@@ -501,9 +526,10 @@ export default function Chat() {
         <button
           onClick={() => setHistoryOpen(!historyOpen)}
           title="Conversation history"
+          aria-label="Conversation history"
           className="flex items-center justify-center rounded-lg flex-shrink-0"
           style={{
-            width: 28, height: 28,
+            width: 28, height: 28, position: 'relative',
             background: historyOpen ? 'var(--color-amber-muted)' : 'hsl(228 18% 10%)',
             border: `1px solid ${historyOpen ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
             cursor: 'pointer',
@@ -511,6 +537,18 @@ export default function Chat() {
           }}
         >
           <History size={12} />
+          {conversations.length > 0 && (
+            <span style={{
+              position: 'absolute', top: -4, right: -4,
+              minWidth: 14, height: 14, borderRadius: 7,
+              background: 'var(--color-amber)', color: 'hsl(228 22% 7%)',
+              fontFamily: 'var(--font-mono)', fontSize: 8, fontWeight: 700,
+              display: 'flex', alignItems: 'center', justifyContent: 'center',
+              padding: '0 3px',
+            }}>
+              {conversations.length}
+            </span>
+          )}
         </button>
         {CHAT_PERSONAS.map(pName => {
           const p = PERSONAS[pName]
@@ -618,6 +656,7 @@ export default function Chat() {
         <button
           onClick={sendMessage}
           disabled={!input.trim() || isLoading}
+          aria-label="Send message"
           style={{
             flexShrink: 0, width: 32, height: 32, borderRadius: 8,
             background: input.trim() && !isLoading ? 'var(--color-amber)' : 'var(--color-amber-muted)',
