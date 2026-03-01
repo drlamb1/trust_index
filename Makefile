@@ -13,7 +13,8 @@ DAYS    ?= 365       # override with: make ingest-prices DAYS=90
         ticker-list \
         railway-deploy railway-deploy-worker \
         railway-migrate railway-admin railway-logs railway-logs-worker \
-        simulation-worker railway-deploy-simulation railway-deploy-all-3
+        simulation-worker railway-deploy-simulation railway-deploy-all-3 \
+        mlops-dashboard
 
 # ── Help ────────────────────────────────────────────────────────────────────────
 
@@ -60,6 +61,9 @@ help:
 	@echo "    make railway-deploy-all-3       Deploy: all three services"
 	@echo "    make railway-logs               Tail web logs"
 	@echo "    make railway-logs-worker        Tail worker logs"
+	@echo ""
+	@echo "  ── MLOps Dashboard ───────────────────────────────"
+	@echo "    make mlops-dashboard    Streamlit dashboard  http://localhost:8501"
 	@echo ""
 
 # ── Docker (local dev — Redis only) ──────────────────────────────────────────
@@ -189,3 +193,8 @@ ml-train-ranker:
 
 ml-train-hedging:
 	$(PYTHON) -m ml.deep_hedging.training
+
+# ── MLOps Dashboard ───────────────────────────────────────────────────────
+
+mlops-dashboard:
+	cd mlops_dashboard && ../$(PYTHON) -m streamlit run app.py --server.port 8501
