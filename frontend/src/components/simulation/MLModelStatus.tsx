@@ -35,9 +35,9 @@ export default function MLModelStatus() {
   }
 
   const models: Array<{ key: string; label: string; info: ModelInfo }> = [
-    { key: 'sentiment', label: 'Sentiment', info: data.sentiment ?? { active: false } },
-    { key: 'signal_ranker', label: 'Signal Ranker', info: data.signal_ranker ?? { active: false } },
-    { key: 'deep_hedging', label: 'Deep Hedging', info: data.deep_hedging ?? { active: false } },
+    { key: 'sentiment', label: 'Sentiment', info: (data.sentiment ?? { active: false }) as ModelInfo },
+    { key: 'signal_ranker', label: 'Signal Ranker', info: (data.signal_ranker ?? { active: false }) as ModelInfo },
+    { key: 'deep_hedging', label: 'Deep Hedging', info: (data.deep_hedging ?? { active: false }) as ModelInfo },
   ]
 
   return (
