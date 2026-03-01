@@ -89,7 +89,7 @@ export default function TopBar() {
     <header
       className="fixed top-0 right-0 flex items-center justify-between px-6"
       style={{
-        left: 72,
+        left: 88,
         height: 56,
         background: 'hsl(228 22% 7% / 0.8)',
         backdropFilter: 'blur(12px)',

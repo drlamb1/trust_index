@@ -1,7 +1,7 @@
 // Ticker Detail — signal → thesis → backtest trace view
 // Header | Price Chart | Technicals | Theses | Backtests | Alerts
 
-import { useParams, Link } from 'react-router-dom'
+import { useParams, Link, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -73,13 +73,15 @@ function SectionHeader({ children }: { children: React.ReactNode }) {
 
 function ThesisRow({ thesis }: { thesis: SimulatedThesis }) {
   const color = STATUS_COLOR[thesis.status] ?? 'var(--color-text-muted)'
+  const navigate = useNavigate()
   return (
     <div
-      style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 12 }}
+      onClick={() => navigate(`/chat?persona=thesis_lord&message=${encodeURIComponent(`What's the status of thesis "${thesis.name}" (ID ${thesis.id})? Full picture.`)}`)}
+      style={{ padding: '10px 0', borderBottom: '1px solid var(--color-border)', display: 'flex', alignItems: 'flex-start', gap: 12, cursor: 'pointer' }}
     >
       <BarChart2 size={13} style={{ color, flexShrink: 0, marginTop: 2 }} />
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--color-text-primary)', marginBottom: 2 }}>
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: 12, color: 'var(--color-amber)', marginBottom: 2 }}>
           {thesis.name}
         </div>
         <div style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-muted)', lineHeight: 1.5 }}>

@@ -21,7 +21,7 @@ export default function Sidebar() {
   return (
     <nav
       className="fixed left-0 top-0 h-screen flex flex-col items-center py-4 z-50"
-      style={{ width: 72, background: 'hsl(228 22% 7%)', borderRight: '1px solid var(--color-border)' }}
+      style={{ width: 88, background: 'hsl(228 22% 7%)', borderRight: '1px solid var(--color-border)' }}
     >
       {/* Logo */}
       <div className="mb-8 flex items-center justify-center w-10 h-10 rounded-xl"
@@ -38,7 +38,7 @@ export default function Sidebar() {
             end={to === '/'}
             title={label}
             className={({ isActive }) =>
-              `group relative flex items-center justify-center w-10 h-10 rounded-lg transition-colors ${
+              `flex flex-col items-center justify-center gap-1 py-2 px-1 rounded-lg transition-colors ${
                 isActive
                   ? 'text-amber bg-amber-muted'
                   : 'text-dim hover:text-muted'
@@ -50,16 +50,10 @@ export default function Sidebar() {
             })}
           >
             <Icon size={16} />
-            {/* Tooltip */}
-            <span
-              className="absolute left-14 px-2 py-1 rounded text-xs pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity whitespace-nowrap z-50"
-              style={{
-                background: 'hsl(228 20% 14%)',
-                border: '1px solid var(--color-border)',
-                color: 'var(--color-text-primary)',
-                fontFamily: 'var(--font-sans)',
-              }}
-            >
+            <span style={{
+              fontFamily: 'var(--font-sans)', fontSize: 8, fontWeight: 600,
+              letterSpacing: '0.02em', textAlign: 'center', lineHeight: 1.2,
+            }}>
               {label}
             </span>
           </NavLink>

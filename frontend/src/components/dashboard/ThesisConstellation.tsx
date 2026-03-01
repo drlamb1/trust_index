@@ -119,7 +119,7 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
         </h2>
       </div>
       <div style={{ color: 'var(--color-text-dim)', fontSize: 11, marginBottom: 12 }}>
-        Signal correlations · confidence-weighted
+        Signal correlations · confidence-weighted · click a dot to explore
       </div>
 
       {/* Force graph */}
@@ -139,6 +139,10 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
           onNodeClick={(node: any) => {
             if (node.thesis) onThesisSelect?.(node.thesis)
           }}
+          onNodeHover={(node: any) => {
+            const el = graphRef.current?.['_canvas'] as HTMLCanvasElement | undefined
+            if (el) el.style.cursor = node ? 'pointer' : 'default'
+          }}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
             const r = node.radius
             const color = node.color
@@ -157,8 +161,8 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
             ctx.fillStyle = color
             ctx.fill()
 
-            // Label (only show if zoomed in enough)
-            if (globalScale > 1.5) {
+            // Label (show at reasonable zoom levels)
+            if (globalScale > 0.7) {
               ctx.font = `${10 / globalScale}px "Space Grotesk", sans-serif`
               ctx.fillStyle = 'rgba(255,255,255,0.7)'
               ctx.textAlign = 'center'

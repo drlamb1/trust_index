@@ -9,7 +9,7 @@ export default function Layout({ children }: { children: ReactNode }) {
       <TopBar />
       <main
         style={{
-          marginLeft: 72,
+          marginLeft: 88,
           marginTop: 56,
           padding: '24px',
           minHeight: 'calc(100vh - 56px)',

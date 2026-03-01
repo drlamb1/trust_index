@@ -2,7 +2,7 @@
 // Icon encoding type, ticker badge, one-line story, timestamp
 
 import { useState, useEffect } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Zap, AlertTriangle, FileSearch, BarChart2, TrendingDown, Info } from 'lucide-react'
 import { createSimulationStream } from '@/lib/sse'
 import { agentColor } from '@/lib/personas'
@@ -41,6 +41,7 @@ function formatLine(item: FeedItem): string {
 }
 
 export default function IntelligenceFeed() {
+  const navigate = useNavigate()
   const [items, setItems] = useState<FeedItem[]>([])
   const [connected, setConnected] = useState(false)
 
@@ -96,7 +97,11 @@ export default function IntelligenceFeed() {
             <div
               key={`${item.id}-${i}`}
               className="flex items-start gap-2"
-              style={{ padding: '6px 0', borderBottom: '1px solid var(--color-border)', fontSize: 11 }}
+              onClick={() => ticker && navigate(`/tickers/${ticker}`)}
+              style={{
+                padding: '6px 0', borderBottom: '1px solid var(--color-border)', fontSize: 11,
+                cursor: ticker ? 'pointer' : 'default',
+              }}
             >
               <Icon size={12} style={{ color: agentColor(item.agent_name), flexShrink: 0, marginTop: 2 }} />
               <div className="flex-1 min-w-0">
