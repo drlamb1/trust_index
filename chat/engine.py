@@ -417,8 +417,9 @@ async def chat_turn(
             # Execute each tool and collect results
             tool_results: list[dict] = []
             for tb in tool_blocks:
-                # Persist tool_call
+                # Persist tool_call — inject context metadata for tools that need it
                 tool_input_with_id = {**tb["input"], "_tool_use_id": tb["id"]}
+                tool_input_with_id["_user_id"] = user_id
                 if tb["name"] == "capture_feature_request":
                     tool_input_with_id["_conversation_id"] = conv.id
                 await _persist_message(
@@ -430,8 +431,9 @@ async def chat_turn(
                 )
                 seq += 1
 
-                # Execute
-                result_data = await execute_tool(tb["name"], tb["input"], session)
+                # Execute — pass _user_id so tools can query user-scoped data
+                exec_params = {**tb["input"], "_user_id": user_id}
+                result_data = await execute_tool(tb["name"], exec_params, session)
 
                 # Persist tool_result
                 await _persist_message(

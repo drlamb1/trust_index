@@ -267,11 +267,6 @@ export default function Chat() {
       .finally(() => setIsLoadingHistory(false))
   }, [activePersona])
 
-  // Persist conversationId per persona whenever it changes
-  useEffect(() => {
-    if (conversationId) localStorage.setItem(convKey(activePersona), conversationId)
-  }, [conversationId, activePersona])
-
   const sendMessage = useCallback(async () => {
     const text = input.trim()
     if (!text || isLoading) return
@@ -304,13 +299,17 @@ export default function Chat() {
 
       for await (const event of streamChat(text, conversationId, activePersona)) {
         switch (event.event) {
-          case 'meta':
-            setConversationId(event.data.conversation_id)
+          case 'meta': {
+            const newConvId = event.data.conversation_id as string
+            setConversationId(newConvId)
+            // Persist immediately — only save when server confirms, never during tab switches
+            localStorage.setItem(convKey(activePersona), newConvId)
             currentPersona = event.data.persona as PersonaName
             setMessages(prev => prev.map(m =>
               m.id === assistantId ? { ...m, persona: currentPersona } : m
             ))
             break
+          }
 
           case 'token':
             currentText += event.data.text

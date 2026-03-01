@@ -56,6 +56,25 @@ class TestEdgeToolAccess:
     def test_edge_has_suggest_handoff(self):
         assert "suggest_handoff" in PERSONAS["edge"].tools
 
+    def test_edge_has_conversation_summaries(self):
+        assert "get_conversation_summaries" in PERSONAS["edge"].tools
+
+
+class TestThesisGeniusReflection:
+    def test_thesis_has_reflection_tools(self):
+        """Thesis Genius should have tools to reflect on thesis outcomes."""
+        tools = set(PERSONAS["thesis"].tools)
+        assert "get_thesis_lifecycle" in tools
+        assert "get_performance_attribution" in tools
+        assert "get_paper_portfolio" in tools
+        assert "get_agent_memories" in tools
+
+    def test_thesis_no_mutating_tools(self):
+        """Thesis Genius should NOT have tools that mutate state."""
+        tools = set(PERSONAS["thesis"].tools)
+        forbidden = {"propose_thesis", "trigger_backtest", "mutate_thesis", "retire_thesis"}
+        assert tools.isdisjoint(forbidden), f"Thesis has forbidden tools: {tools & forbidden}"
+
 
 class TestFallback:
     def test_get_persona_returns_edge_for_unknown(self):

@@ -1198,6 +1198,67 @@ async def _exec_record_lesson_taught(session: AsyncSession, params: dict) -> dic
 
 
 # ---------------------------------------------------------------------------
+# Cross-persona context
+# ---------------------------------------------------------------------------
+
+
+async def _exec_get_conversation_summaries(session: AsyncSession, params: dict) -> dict:
+    """Return recent conversation summaries across all personas for the current user."""
+    from core.models import ChatConversation, ChatMessage
+
+    user_id = params.get("_user_id")
+    if not user_id:
+        return {"error": "No user context available"}
+
+    limit = min(params.get("limit", 5), 10)
+
+    # Get recent conversations for this user
+    result = await session.execute(
+        select(ChatConversation)
+        .where(ChatConversation.user_id == user_id)
+        .order_by(ChatConversation.updated_at.desc())
+        .limit(limit)
+    )
+    convos = result.scalars().all()
+
+    if not convos:
+        return {"conversations": [], "count": 0}
+
+    summaries = []
+    for conv in convos:
+        # Get last user message and last assistant message
+        msg_result = await session.execute(
+            select(ChatMessage)
+            .where(
+                ChatMessage.conversation_id == conv.id,
+                ChatMessage.role.in_(["user", "assistant"]),
+            )
+            .order_by(ChatMessage.sequence.desc())
+            .limit(4)
+        )
+        recent_msgs = msg_result.scalars().all()
+
+        last_user = ""
+        last_assistant = ""
+        for msg in recent_msgs:
+            if msg.role == "user" and not last_user:
+                last_user = (msg.content or "")[:200]
+            elif msg.role == "assistant" and not last_assistant:
+                last_assistant = (msg.content or "")[:200]
+
+        summaries.append({
+            "persona": conv.active_persona,
+            "title": conv.title or "Untitled",
+            "message_count": conv.message_count,
+            "last_user_message": last_user,
+            "last_assistant_snippet": last_assistant,
+            "updated_at": conv.updated_at.isoformat() if conv.updated_at else None,
+        })
+
+    return {"conversations": summaries, "count": len(summaries)}
+
+
+# ---------------------------------------------------------------------------
 # Registry
 # ---------------------------------------------------------------------------
 
@@ -1436,7 +1497,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get the current paper portfolio state — open positions, P&L attribution by thesis, and portfolio-level metrics. All play-money.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_paper_portfolio,
-        personas=["analyst", "thesis_lord", "edge"],
+        personas=["analyst", "thesis_lord", "edge", "thesis"],
     ),
     "propose_thesis": ToolDef(
         name="propose_thesis",
@@ -1470,7 +1531,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_thesis_lifecycle,
-        personas=["thesis_lord", "post_mortem", "edge"],
+        personas=["thesis_lord", "post_mortem", "edge", "thesis"],
     ),
     "get_simulation_log": ToolDef(
         name="get_simulation_log",
@@ -1520,7 +1581,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         description="Get P&L attribution by thesis — which ideas are driving returns in the paper portfolio.",
         input_schema={"type": "object", "properties": {}},
         execute=_exec_get_performance_attribution,
-        personas=["thesis_lord", "post_mortem", "edge"],
+        personas=["thesis_lord", "post_mortem", "edge", "thesis"],
     ),
     "get_vol_surface": ToolDef(
         name="get_vol_surface",
@@ -1685,7 +1746,7 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
             },
         },
         execute=_exec_get_agent_memories,
-        personas=["post_mortem", "edge"],
+        personas=["post_mortem", "edge", "thesis"],
     ),
     "search_decision_log": ToolDef(
         name="search_decision_log",
@@ -1722,6 +1783,18 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         },
         execute=_exec_record_lesson_taught,
         personas=["edge"],
+    ),
+    "get_conversation_summaries": ToolDef(
+        name="get_conversation_summaries",
+        description="Get summaries of the user's recent conversations across all personas. Shows what topics were discussed, with whom, and the latest exchanges. Use this to understand context before responding.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "Max conversations to return (default 5, max 10)", "default": 5},
+            },
+        },
+        execute=_exec_get_conversation_summaries,
+        personas=["edge", "post_mortem"],
     ),
 }
 

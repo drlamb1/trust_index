@@ -81,3 +81,16 @@ class TestToolRegistry:
         enum_values = set(schema["properties"]["target_persona"]["enum"])
         expected = {"edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
         assert enum_values == expected
+
+    def test_conversation_summaries_registered(self):
+        assert "get_conversation_summaries" in TOOL_REGISTRY
+        assert "edge" in TOOL_REGISTRY["get_conversation_summaries"].personas
+        assert "post_mortem" in TOOL_REGISTRY["get_conversation_summaries"].personas
+
+    def test_thesis_tools_all_exist_in_registry(self):
+        """Every tool in Thesis Genius's list must exist in the registry."""
+        from chat.personas import PERSONAS
+        thesis_tools = PERSONAS["thesis"].tools
+        for tool_name in thesis_tools:
+            assert tool_name in TOOL_REGISTRY, f"Tool '{tool_name}' in Thesis's list but not in TOOL_REGISTRY"
+            assert "thesis" in TOOL_REGISTRY[tool_name].personas, f"Tool '{tool_name}' missing 'thesis' in personas"
