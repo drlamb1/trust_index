@@ -391,7 +391,7 @@ async def chat_turn(
         memory_count = 0
         if memory_block:
             system_text += memory_block
-            memory_count = memory_block.count("[") - 1  # count memory entries
+            memory_count = memory_block.count("] (confidence:")  # count memory entries
 
         system_blocks = [
             {
