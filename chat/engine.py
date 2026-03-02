@@ -383,6 +383,16 @@ async def chat_turn(
             if pm_brief:
                 system_text += f"\n\n{pm_brief}"
 
+        # Inject agent memories — durable lessons from past experience
+        from simulation.memory import inject_memories_into_prompt
+        memory_block = await inject_memories_into_prompt(
+            session, persona_name, context=cleaned_text,
+        )
+        memory_count = 0
+        if memory_block:
+            system_text += memory_block
+            memory_count = memory_block.count("[") - 1  # count memory entries
+
         system_blocks = [
             {
                 "type": "text",
@@ -390,6 +400,9 @@ async def chat_turn(
                 "cache_control": {"type": "ephemeral"},
             }
         ]
+
+        if memory_count > 0:
+            yield _sse("memory_info", memory_count=memory_count)
 
         # 6. Agentic loop — stream response, handle tool_use
         total_input = 0
@@ -512,8 +525,8 @@ async def chat_turn(
                 )
                 seq += 1
 
-                # Execute — pass _user_id so tools can query user-scoped data
-                exec_params = {**tb["input"], "_user_id": user_id}
+                # Execute — pass _user_id and _persona so tools can query user-scoped data
+                exec_params = {**tb["input"], "_user_id": user_id, "_persona": persona_name}
                 result_data = await execute_tool(tb["name"], exec_params, session)
 
                 # Persist tool_result

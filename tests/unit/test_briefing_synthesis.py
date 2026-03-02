@@ -47,8 +47,8 @@ class TestEdgerPromptRewrite:
         assert "generate_full_briefing" in tools
 
     def test_edger_tool_count(self):
-        """Edge should have 23 tools (22 original + generate_full_briefing)."""
-        assert len(PERSONAS["edge"].tools) == 23
+        """Edge should have 24 tools (22 original + generate_full_briefing + remember_this)."""
+        assert len(PERSONAS["edge"].tools) == 24
 
 
 class TestPMPromptRewrite:
@@ -82,8 +82,8 @@ class TestPMPromptRewrite:
         assert "You use she/her. You have the helm." in prompt
 
     def test_pm_tool_count_unchanged(self):
-        """PM should still have 11 tools."""
-        assert len(PERSONAS["pm"].tools) == 11
+        """PM should still have 12 tools (11 original + remember_this)."""
+        assert len(PERSONAS["pm"].tools) == 12
 
 
 # ---------------------------------------------------------------------------

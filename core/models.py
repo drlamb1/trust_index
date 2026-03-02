@@ -198,6 +198,8 @@ class MemoryType(str, enum.Enum):
     PATTERN = "pattern"  # "Heston rho < -0.6 for tech names"
     FAILURE = "failure"  # "Thesis X failed: ignored sector rotation"
     SUCCESS = "success"  # "Energy thesis outperformed by 12%"
+    USER_CONTEXT = "user_context"  # "Marine vet. 'Backblast area' = check downstream risk"
+    TEACHING = "teaching"  # "Explained Sortino vs Sharpe — user groks downside deviation now"
 
 
 # ---------------------------------------------------------------------------

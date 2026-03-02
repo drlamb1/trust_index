@@ -1254,6 +1254,48 @@ async def _exec_record_lesson_taught(session: AsyncSession, params: dict) -> dic
 
 
 # ---------------------------------------------------------------------------
+# Durable memory storage
+# ---------------------------------------------------------------------------
+
+
+async def _exec_remember_this(session: AsyncSession, params: dict) -> dict:
+    """Store a durable memory that persists across conversations."""
+    from core.models import AgentMemory, MemoryType
+
+    content = params.get("content", "").strip()
+    if not content:
+        return {"error": "content is required"}
+
+    raw_type = params.get("memory_type", "insight")
+    try:
+        memory_type = MemoryType(raw_type)
+    except ValueError:
+        memory_type = MemoryType.INSIGHT
+
+    confidence = min(max(float(params.get("confidence", 0.7)), 0.0), 1.0)
+
+    # Use _persona context injected by engine, fall back to "edge"
+    agent_name = params.get("_persona", "edge")
+
+    memory = AgentMemory(
+        agent_name=agent_name,
+        memory_type=memory_type.value,
+        content=content,
+        confidence=confidence,
+        evidence={"source": "chat", "persona": agent_name},
+    )
+    session.add(memory)
+    await session.flush()
+
+    return {
+        "stored": True,
+        "memory_type": memory_type.value,
+        "confidence": confidence,
+        "content_preview": content[:100],
+    }
+
+
+# ---------------------------------------------------------------------------
 # Cross-persona context
 # ---------------------------------------------------------------------------
 
@@ -1869,6 +1911,38 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         },
         execute=_exec_get_conversation_summaries,
         personas=["edge", "post_mortem"],
+    ),
+    # ─── Durable Memory ────────────────────────────────────────────────────
+    "remember_this": ToolDef(
+        name="remember_this",
+        description=(
+            "Store a durable memory that persists across conversations. "
+            "Use when the user reveals something about themselves, uses a powerful "
+            "analogy, or when you learn something that should inform future interactions. "
+            "A good memory changes how you'd open the next conversation."
+        ),
+        input_schema={
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "The memory to store. Write it as a note to your future self.",
+                },
+                "memory_type": {
+                    "type": "string",
+                    "enum": ["insight", "pattern", "failure", "success", "user_context", "teaching"],
+                    "description": "Category: user_context for who they are, teaching for what landed, insight/pattern/failure/success for system lessons.",
+                },
+                "confidence": {
+                    "type": "number",
+                    "description": "How durable is this? 0.5 = tentative, 0.8 = solid, 0.95 = foundational.",
+                    "default": 0.7,
+                },
+            },
+            "required": ["content", "memory_type"],
+        },
+        execute=_exec_remember_this,
+        personas=["edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"],
     ),
 }
 

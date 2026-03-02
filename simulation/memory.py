@@ -143,23 +143,45 @@ async def inject_memories_into_prompt(
     agent_name: str,
     context: str | None = None,
     limit: int = 5,
+    include_shared: bool = True,
 ) -> str:
-    """Build a memory block to prepend to an agent's system prompt.
+    """Build a memory block to append to an agent's system prompt.
+
+    Pulls the agent's own memories plus high-confidence USER_CONTEXT
+    memories from any agent (since user context is universal).
 
     Returns formatted string of relevant memories, or empty string if none.
     """
-    memories = await recall_relevant_memories(
+    # 1. Agent's own memories (all types)
+    own_memories = await recall_relevant_memories(
         session, agent_name, context=context, limit=limit,
     )
 
-    if not memories:
+    # 2. Shared user_context memories from all agents (high confidence only)
+    shared_memories: list[AgentMemory] = []
+    if include_shared:
+        shared_memories = await recall_relevant_memories(
+            session, agent_name=None, context=context,
+            memory_type="user_context", limit=3, min_confidence=0.7,
+        )
+        # Deduplicate — don't include shared memories already in own set
+        own_ids = {m.id for m in own_memories}
+        shared_memories = [m for m in shared_memories if m.id not in own_ids]
+
+    all_memories = own_memories + shared_memories
+    if not all_memories:
         return ""
 
+    type_icons = {
+        "insight": "💡", "pattern": "🔄", "failure": "⚠️", "success": "✅",
+        "user_context": "👤", "teaching": "📚",
+    }
+
     lines = ["\n--- AGENT MEMORIES (from past experience) ---"]
-    for mem in memories:
-        type_icon = {"insight": "💡", "pattern": "🔄", "failure": "⚠️", "success": "✅"}.get(mem.memory_type, "📝")
+    for mem in all_memories:
+        icon = type_icons.get(mem.memory_type, "📝")
         lines.append(
-            f"{type_icon} [{mem.memory_type.upper()}] (confidence: {mem.confidence:.0%}) {mem.content}"
+            f"{icon} [{mem.memory_type.upper()}] (confidence: {mem.confidence:.0%}) {mem.content}"
         )
     lines.append("--- END MEMORIES ---\n")
 
@@ -285,6 +307,133 @@ Focus on patterns that would help future thesis generation and evaluation."""
 
     except Exception as e:
         logger.error("Memory consolidation failed: %s", e)
+        return 0
+
+
+# ---------------------------------------------------------------------------
+# Event-Driven Retrospective
+# ---------------------------------------------------------------------------
+
+
+async def run_event_retro(
+    session: AsyncSession,
+    thesis_id: int,
+    api_key: str,
+) -> int:
+    """Run a focused retrospective on a single thesis's lifecycle.
+
+    Called immediately after BACKTEST_COMPLETE or RETIREMENT events.
+    Reviews the thesis's full event history and extracts 1-2 durable lessons,
+    attributed to the agent that generated the thesis.
+
+    Returns count of memories created.
+    """
+    # Pull the thesis's full event history
+    result = await session.execute(
+        select(SimulationLog)
+        .where(SimulationLog.thesis_id == thesis_id)
+        .order_by(SimulationLog.created_at)
+    )
+    events = result.scalars().all()
+
+    if not events:
+        return 0
+
+    # Identify which agent generated the thesis (attribute memories to them)
+    gen_event = next(
+        (e for e in events if e.event_type in ("generation", "GENERATION")),
+        None,
+    )
+    agent_name = gen_event.agent_name if gen_event else "thesis_lord"
+
+    event_summaries = []
+    for e in events:
+        event_summaries.append({
+            "type": e.event_type,
+            "agent": e.agent_name,
+            "data": e.event_data,
+            "timestamp": e.created_at.isoformat() if e.created_at else None,
+        })
+
+    try:
+        import anthropic
+
+        client = anthropic.AsyncAnthropic(api_key=api_key)
+
+        prompt = f"""You are reviewing a single thesis's complete lifecycle. Extract 1-2 durable
+lessons — things that should change how future theses are generated or evaluated.
+
+Thesis lifecycle events (chronological):
+{json.dumps(event_summaries, indent=2, default=str)}
+
+Return a JSON array of 1-2 memories:
+[
+  {{"type": "insight|pattern|failure|success", "content": "description", "confidence": 0.5-0.9}}
+]
+
+Rules:
+- Only extract genuinely durable lessons, not observations.
+- A lesson changes future behavior. "Sharpe was 0.4" is not a lesson. "Theses on
+  low-float small caps need tighter stop losses" is a lesson.
+- Confidence reflects evidence strength: single thesis = 0.5-0.6, pattern across
+  multiple = 0.7+."""
+
+        response = await client.messages.create(
+            model="claude-haiku-4-5-20251001",
+            max_tokens=1000,
+            messages=[{"role": "user", "content": prompt}],
+        )
+
+        raw = response.content[0].text
+        if "```json" in raw:
+            raw = raw.split("```json")[1].split("```")[0]
+        elif "```" in raw:
+            raw = raw.split("```")[1].split("```")[0]
+
+        new_memories = json.loads(raw)
+        count = 0
+
+        for mem_data in new_memories:
+            if not isinstance(mem_data, dict) or "content" not in mem_data:
+                continue
+
+            mem_type = mem_data.get("type", "insight")
+            try:
+                memory_type = MemoryType(mem_type)
+            except ValueError:
+                memory_type = MemoryType.INSIGHT
+
+            await store_memory(
+                session,
+                agent_name=agent_name,
+                memory_type=memory_type,
+                content=mem_data["content"],
+                confidence=float(mem_data.get("confidence", 0.5)),
+                evidence={"source": "event_retro", "thesis_id": thesis_id},
+            )
+            count += 1
+
+        # Log the retro itself
+        log_entry = SimulationLog(
+            thesis_id=thesis_id,
+            agent_name="post_mortem",
+            event_type="post_mortem",
+            event_data={
+                "trigger": "event_retro",
+                "events_reviewed": len(events),
+                "memories_created": count,
+            },
+        )
+        session.add(log_entry)
+
+        logger.info(
+            "Event retro for thesis %d: %d memories from %d events (attributed to %s)",
+            thesis_id, count, len(events), agent_name,
+        )
+        return count
+
+    except Exception as e:
+        logger.error("Event retro failed for thesis %d: %s", thesis_id, e)
         return 0
 
 
