@@ -527,15 +527,13 @@ export default function Chat() {
 
       {/* Main chat area */}
       <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
-      {/* Persona selector — sticky at top, compact single-line tabs */}
+      {/* Persona selector — pinned at top of chat area */}
       <div
-        className="flex gap-1.5 pb-3 items-center"
+        className="flex gap-1.5 items-center"
         style={{
           overflowX: 'auto', flexShrink: 0,
-          borderBottom: '1px solid var(--color-border)', marginBottom: 8,
-          /* Fade hint on right edge when scrollable */
-          maskImage: 'linear-gradient(to right, black 90%, transparent 100%)',
-          WebkitMaskImage: 'linear-gradient(to right, black 90%, transparent 100%)',
+          borderBottom: '1px solid var(--color-border)',
+          padding: '8px 0 10px',
         }}
       >
         <button
