@@ -154,21 +154,17 @@ def _format_movers(movers: list[dict]) -> str:
 
     lines = []
     if gainers:
-        lines.append("**Top Gainers**")
+        lines.append("**Top Gainers**\n")
+        lines.append("| Ticker | 5D % | Start | End | Period |")
+        lines.append("|--------|------|-------|-----|--------|")
         for m in gainers:
-            lines.append(
-                f"  {m['symbol']:<6} +{m['pct']:>5.1f}%  "
-                f"${m['start']:.2f} → ${m['end']:.2f}  ({m['days']}d)"
-            )
+            lines.append(f"| {m['symbol']} | +{m['pct']:.1f}% | ${m['start']:.2f} | ${m['end']:.2f} | {m['days']}d |")
     if losers:
-        if lines:
-            lines.append("")
-        lines.append("**Top Losers**")
+        lines.append("\n**Top Losers**\n")
+        lines.append("| Ticker | 5D % | Start | End | Period |")
+        lines.append("|--------|------|-------|-----|--------|")
         for m in losers:
-            lines.append(
-                f"  {m['symbol']:<6}  {m['pct']:>5.1f}%  "
-                f"${m['start']:.2f} → ${m['end']:.2f}  ({m['days']}d)"
-            )
+            lines.append(f"| {m['symbol']} | {m['pct']:.1f}% | ${m['start']:.2f} | ${m['end']:.2f} | {m['days']}d |")
 
     return "\n".join(lines) + "\n"
 
@@ -197,13 +193,15 @@ def _format_alerts(rows: list) -> str:
         return "_No alerts in the last 24 hours._\n"
 
     severity_icon = {"red": "🔴", "yellow": "🟡", "green": "🟢"}
-    lines = []
+    lines = [
+        "| Severity | Ticker | Alert | Score |",
+        "|----------|--------|-------|-------|",
+    ]
     for alert, symbol in rows:
         icon = severity_icon.get(alert.severity, "⚪")
-        score_str = f"  score={alert.score:.0f}" if alert.score else ""
-        lines.append(f"  {icon} [{symbol}] {alert.title}{score_str}")
-        if alert.body:
-            lines.append(f"       {alert.body[:120]}")
+        score_str = f"{alert.score:.0f}" if alert.score else "—"
+        title = alert.title or ""
+        lines.append(f"| {icon} {alert.severity or '?'} | {symbol} | {title} | {score_str} |")
 
     return "\n".join(lines) + "\n"
 
@@ -235,15 +233,16 @@ def _format_news(articles: list) -> str:
     if not articles:
         return "_No scored news in the last 24 hours. Run: `./ef ingest news`_\n"
 
-    lines = []
+    lines = [
+        "| Sentiment | Score | Headline | Source |",
+        "|-----------|-------|----------|--------|",
+    ]
     for art in articles:
         score = art.sentiment_score or 0
         icon = "📈" if score > 0.2 else ("📉" if score < -0.2 else "➡️")
-        score_str = f"{score:+.2f}"
         source = art.source_name or "Unknown"
-        title = art.title[:90] + ("…" if len(art.title) > 90 else "")
-        lines.append(f"  {icon} [{score_str}] {title}")
-        lines.append(f"       via {source}")
+        title = (art.title[:80] + "…" if len(art.title) > 80 else art.title).replace("|", "—")
+        lines.append(f"| {icon} | {score:+.2f} | {title} | {source} |")
 
     return "\n".join(lines) + "\n"
 
@@ -274,13 +273,16 @@ def _format_insider_buys(rows: list) -> str:
     if not rows:
         return "_No insider buys in the last 7 days._\n"
 
-    lines = []
+    lines = [
+        "| Ticker | Insider | Title | Amount | Filed |",
+        "|--------|---------|-------|--------|-------|",
+    ]
     for trade, symbol in rows:
-        amount = f"${trade.total_amount:,.0f}" if trade.total_amount else "unknown amount"
+        amount = f"${trade.total_amount:,.0f}" if trade.total_amount else "—"
         name = trade.insider_name or "Unknown"
-        title = f" ({trade.insider_title})" if trade.insider_title else ""
-        filed = trade.filed_date.strftime("%b %d") if trade.filed_date else ""
-        lines.append(f"  [{symbol}]  {name}{title}  bought {amount}  filed {filed}")
+        title = trade.insider_title or "—"
+        filed = trade.filed_date.strftime("%b %d") if trade.filed_date else "—"
+        lines.append(f"| {symbol} | {name} | {title} | {amount} | {filed} |")
 
     return "\n".join(lines) + "\n"
 
@@ -358,9 +360,12 @@ def _format_technical_signals(signals: list[dict]) -> str:
     if not signals:
         return "_No technical signals. Run: `./ef ingest prices` then compute technicals._\n"
 
-    lines = []
+    lines = [
+        "| Ticker | Signal | Detail |",
+        "|--------|--------|--------|",
+    ]
     for sig in signals:
-        lines.append(f"  {sig['icon']} [{sig['symbol']}] {sig['signal']}  —  {sig['detail']}")
+        lines.append(f"| {sig['symbol']} | {sig['icon']} {sig['signal']} | {sig['detail']} |")
 
     return "\n".join(lines) + "\n"
 
@@ -461,67 +466,32 @@ def _format_filing_drift(rows: list[dict]) -> str:
     if not rows:
         return "_No 10-K analyses available. Run: `./ef ingest filings --type 10-K --limit 2`_\n"
 
-    lines = []
+    lines = [
+        "| Ticker | Year | Health | Δ | Flags | GM | OpM | RevGrowth | Tone |",
+        "|--------|------|--------|---|-------|----|-----|-----------|------|",
+    ]
     for r in rows:
         symbol = r["symbol"]
-        score = r["score"]
+        score = f"{r['score']:.0f}" if r["score"] is not None else "—"
         period = r["period"]
 
-        # Health score line
+        # Score delta
         if r["has_prior"] and r["score_delta"] is not None:
             delta = r["score_delta"]
-            arrow = "▲" if delta > 1 else ("▼" if delta < -1 else "→")
             sign = "+" if delta >= 0 else ""
-            score_str = f"Health {score:.0f}  {arrow} {sign}{delta:.0f}pts"
+            delta_str = f"{sign}{delta:.0f}"
         else:
-            score_str = f"Health {score:.0f}  (no prior year)"
+            delta_str = "—"
 
-        # Red flags
-        flags = r["flags"]
-        fd = r["flags_delta"]
-        if fd is not None and fd != 0:
-            flag_str = f"Flags {flags} ({'+' if fd > 0 else ''}{fd:+d} YoY)"
-        else:
-            flag_str = f"Flags {flags}"
+        flags = str(r["flags"])
+        gm = f"{r['gross_margin']:.1f}%" if r["gross_margin"] is not None else "—"
+        om = f"{r['op_margin']:.1f}%" if r["op_margin"] is not None else "—"
+        rev = f"{r['rev_growth']:.1f}%" if r["rev_growth"] is not None else "—"
 
-        # Margins
-        metric_parts = []
-        if r["gross_margin"] is not None:
-            gm = r["gross_margin"]
-            gmd = r["gm_delta"]
-            if gmd is not None:
-                metric_parts.append(f"GM {gm:.1f}% ({'+' if gmd >= 0 else ''}{gmd:.1f}pp)")
-            else:
-                metric_parts.append(f"GM {gm:.1f}%")
-
-        if r["op_margin"] is not None:
-            om = r["op_margin"]
-            omd = r["om_delta"]
-            if omd is not None:
-                metric_parts.append(f"OpM {om:.1f}% ({'+' if omd >= 0 else ''}{omd:.1f}pp)")
-            else:
-                metric_parts.append(f"OpM {om:.1f}%")
-
-        if r["rev_growth"] is not None:
-            metric_parts.append(f"RevGrowth {r['rev_growth']:.1f}%")
-
-        # Tone indicator
         bull, bear = r["bull"], r["bear"]
-        if bull > bear:
-            tone = f"Tone ↑ ({bull}B/{bear}b)"
-        elif bear > bull:
-            tone = f"Tone ↓ ({bull}B/{bear}b)"
-        else:
-            tone = f"Tone → ({bull}B/{bear}b)"
+        tone = f"↑ {bull}B/{bear}b" if bull > bear else (f"↓ {bull}B/{bear}b" if bear > bull else f"→ {bull}B/{bear}b")
 
-        metrics_str = "  |  ".join(metric_parts) if metric_parts else ""
-        detail_parts = [flag_str]
-        if metrics_str:
-            detail_parts.append(metrics_str)
-        detail_parts.append(tone)
-
-        lines.append(f"  [{symbol}] {period}   {score_str}")
-        lines.append(f"           {'  |  '.join(detail_parts)}")
+        lines.append(f"| {symbol} | {period} | {score} | {delta_str} | {flags} | {gm} | {om} | {rev} | {tone} |")
 
     return "\n".join(lines) + "\n"
 

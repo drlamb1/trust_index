@@ -1,13 +1,47 @@
 // Briefing — daily market brief, clean reading experience
 // react-markdown + remark-gfm, Space Grotesk body, JetBrains Mono for numbers
+// Collapsible sections, table of contents, markdown tables
 
-import { useState } from 'react'
+import { useState, useMemo, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router-dom'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import { briefing } from '@/lib/api'
 import { RefreshCw, GraduationCap, ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
+
+function slugify(text: string) {
+  return text.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+}
+
+/** Extract h2 headers from markdown for TOC */
+function extractH2s(md: string): { text: string; slug: string }[] {
+  const matches = md.matchAll(/^## (.+)$/gm)
+  return [...matches].map(m => ({
+    text: m[1].trim(),
+    slug: slugify(m[1].trim()),
+  }))
+}
+
+/** Split markdown into sections by h2 headers. Content before first h2 is the preamble. */
+function splitSections(md: string): { title: string | null; slug: string | null; body: string }[] {
+  const parts = md.split(/^(## .+)$/gm)
+  const sections: { title: string | null; slug: string | null; body: string }[] = []
+
+  for (let i = 0; i < parts.length; i++) {
+    const part = parts[i]
+    if (part.startsWith('## ')) {
+      const title = part.replace(/^## /, '').trim()
+      const body = parts[i + 1] ?? ''
+      sections.push({ title, slug: slugify(title), body })
+      i++ // skip body part
+    } else if (part.trim()) {
+      // Preamble content before first h2
+      sections.push({ title: null, slug: null, body: part })
+    }
+  }
+  return sections
+}
 
 // Maps concept_id → { name, description, difficulty }
 const CONCEPTS: Record<string, { name: string; desc: string; level: string }> = {
@@ -39,6 +73,62 @@ const LEVEL_COLOR: Record<string, string> = {
   advanced: 'var(--color-cyan)',
 }
 
+const mdComponents = {
+  h1: ({ children }: { children?: React.ReactNode }) => (
+    <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginTop: 32, marginBottom: 12, borderBottom: '1px solid var(--color-border)', paddingBottom: 8 }}>
+      {children}
+    </h1>
+  ),
+  h3: ({ children }: { children?: React.ReactNode }) => (
+    <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', marginTop: 20, marginBottom: 8 }}>
+      {children}
+    </h3>
+  ),
+  p: ({ children }: { children?: React.ReactNode }) => (
+    <p style={{ marginBottom: 12, color: 'var(--color-text-muted)' }}>{children}</p>
+  ),
+  strong: ({ children }: { children?: React.ReactNode }) => (
+    <strong style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{children}</strong>
+  ),
+  code: ({ children }: { children?: React.ReactNode }) => (
+    <code style={{
+      fontFamily: 'var(--font-mono)', fontSize: 12,
+      background: 'hsl(228 15% 13%)', padding: '1px 5px',
+      borderRadius: 3, color: 'var(--color-cyan)',
+    }}>
+      {children}
+    </code>
+  ),
+  table: ({ children }: { children?: React.ReactNode }) => (
+    <div style={{ overflowX: 'auto', marginBottom: 16 }}>
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+        {children}
+      </table>
+    </div>
+  ),
+  th: ({ children }: { children?: React.ReactNode }) => (
+    <th style={{
+      padding: '6px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700,
+      letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)',
+      borderBottom: '1px solid var(--color-border)',
+    }}>
+      {children}
+    </th>
+  ),
+  td: ({ children }: { children?: React.ReactNode }) => (
+    <td style={{
+      padding: '6px 12px', borderBottom: '1px solid var(--color-border)',
+      color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11,
+    }}>
+      {children}
+    </td>
+  ),
+  hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: '24px 0' }} />,
+  li: ({ children }: { children?: React.ReactNode }) => (
+    <li style={{ marginBottom: 4, color: 'var(--color-text-muted)' }}>{children}</li>
+  ),
+} as const
+
 export default function Briefing() {
   const navigate = useNavigate()
   const { data: latest, isLoading: latestLoading } = useQuery({
@@ -59,6 +149,14 @@ export default function Briefing() {
   const isLoading = latestLoading || mdLoading
 
   const [synthOpen, setSynthOpen] = useState(true)
+  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({})
+
+  const tocItems = useMemo(() => markdown ? extractH2s(markdown) : [], [markdown])
+  const sections = useMemo(() => markdown ? splitSections(markdown) : [], [markdown])
+
+  const toggleSection = useCallback((slug: string) => {
+    setCollapsedSections(prev => ({ ...prev, [slug]: !prev[slug] }))
+  }, [])
 
   return (
     <div style={{ maxWidth: 780 }}>
@@ -87,6 +185,32 @@ export default function Briefing() {
         </div>
       </div>
 
+      {/* Table of Contents — horizontal pill strip */}
+      {tocItems.length > 0 && (
+        <div className="flex flex-wrap gap-2" style={{ marginBottom: 20 }}>
+          {tocItems.map(item => (
+            <button
+              key={item.slug}
+              onClick={() => document.getElementById(item.slug)?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+              className="pill"
+              style={{
+                cursor: 'pointer',
+                background: 'hsl(228 15% 12%)',
+                color: 'var(--color-text-muted)',
+                border: '1px solid var(--color-border)',
+                fontSize: 10,
+                fontFamily: 'var(--font-sans)',
+                transition: 'color 0.15s, border-color 0.15s',
+              }}
+              onMouseEnter={e => { e.currentTarget.style.color = 'var(--color-amber)'; e.currentTarget.style.borderColor = 'var(--color-amber-dim)' }}
+              onMouseLeave={e => { e.currentTarget.style.color = 'var(--color-text-muted)'; e.currentTarget.style.borderColor = 'var(--color-border)' }}
+            >
+              {item.text}
+            </button>
+          ))}
+        </div>
+      )}
+
       {isLoading && (
         <div style={{ color: 'var(--color-text-dim)', fontFamily: 'var(--font-sans)', fontSize: 12 }}>
           Generating briefing…
@@ -108,74 +232,46 @@ export default function Briefing() {
             color: 'var(--color-text-primary)',
           }}
         >
-          <ReactMarkdown
-            remarkPlugins={[remarkGfm]}
-            components={{
-              h1: ({ children }) => (
-                <h1 style={{ fontSize: 20, fontWeight: 700, color: 'var(--color-text-primary)', marginTop: 32, marginBottom: 12, borderBottom: '1px solid var(--color-border)', paddingBottom: 8 }}>
-                  {children}
-                </h1>
-              ),
-              h2: ({ children }) => (
-                <h2 style={{
-                  fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
-                  color: 'var(--color-amber)', marginTop: 28, marginBottom: 12,
-                }}>
-                  {children}
-                </h2>
-              ),
-              h3: ({ children }) => (
-                <h3 style={{ fontSize: 14, fontWeight: 600, color: 'var(--color-text-primary)', marginTop: 20, marginBottom: 8 }}>
-                  {children}
-                </h3>
-              ),
-              p: ({ children }) => (
-                <p style={{ marginBottom: 12, color: 'var(--color-text-muted)' }}>{children}</p>
-              ),
-              strong: ({ children }) => (
-                <strong style={{ color: 'var(--color-text-primary)', fontWeight: 600 }}>{children}</strong>
-              ),
-              code: ({ children }) => (
-                <code style={{
-                  fontFamily: 'var(--font-mono)', fontSize: 12,
-                  background: 'hsl(228 15% 13%)', padding: '1px 5px',
-                  borderRadius: 3, color: 'var(--color-cyan)',
-                }}>
-                  {children}
-                </code>
-              ),
-              table: ({ children }) => (
-                <div style={{ overflowX: 'auto', marginBottom: 16 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                    {children}
-                  </table>
-                </div>
-              ),
-              th: ({ children }) => (
-                <th style={{
-                  padding: '6px 12px', textAlign: 'left', fontSize: 10, fontWeight: 700,
-                  letterSpacing: '0.06em', textTransform: 'uppercase', color: 'var(--color-text-muted)',
-                  borderBottom: '1px solid var(--color-border)',
-                }}>
-                  {children}
-                </th>
-              ),
-              td: ({ children }) => (
-                <td style={{
-                  padding: '6px 12px', borderBottom: '1px solid var(--color-border)',
-                  color: 'var(--color-text-primary)', fontFamily: 'var(--font-mono)', fontSize: 11,
-                }}>
-                  {children}
-                </td>
-              ),
-              hr: () => <hr style={{ border: 'none', borderTop: '1px solid var(--color-border)', margin: '24px 0' }} />,
-              li: ({ children }) => (
-                <li style={{ marginBottom: 4, color: 'var(--color-text-muted)' }}>{children}</li>
-              ),
-            }}
-          >
-            {markdown}
-          </ReactMarkdown>
+          {sections.map((section, i) => {
+            const isCollapsed = section.slug ? collapsedSections[section.slug] : false
+            return (
+              <div key={section.slug ?? `pre-${i}`}>
+                {/* Section header (clickable to collapse) */}
+                {section.title && (
+                  <button
+                    id={section.slug!}
+                    onClick={() => section.slug && toggleSection(section.slug)}
+                    style={{
+                      display: 'flex', alignItems: 'center', gap: 8, width: '100%',
+                      background: 'transparent', border: 'none', cursor: 'pointer', padding: 0,
+                      marginTop: 28, marginBottom: isCollapsed ? 4 : 12,
+                    }}
+                  >
+                    <h2 style={{
+                      fontSize: 12, fontWeight: 700, letterSpacing: '0.1em', textTransform: 'uppercase',
+                      color: 'var(--color-amber)', margin: 0,
+                    }}>
+                      {section.title}
+                    </h2>
+                    {isCollapsed
+                      ? <ChevronDown size={12} style={{ color: 'var(--color-text-dim)' }} />
+                      : <ChevronUp size={12} style={{ color: 'var(--color-text-dim)' }} />
+                    }
+                  </button>
+                )}
+
+                {/* Section body (hidden when collapsed) */}
+                {!isCollapsed && (
+                  <ReactMarkdown
+                    remarkPlugins={[remarkGfm]}
+                    components={mdComponents}
+                  >
+                    {section.body}
+                  </ReactMarkdown>
+                )}
+              </div>
+            )
+          })}
         </div>
       )}
 
