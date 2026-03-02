@@ -461,7 +461,7 @@ export default function Chat() {
 
 
   return (
-    <div className="flex" style={{ height: 'calc(100vh - 80px)', marginBottom: '-24px' }}>
+    <div className="flex" style={{ position: 'fixed', top: 56, left: 88, right: 0, bottom: 0, padding: '0 24px' }}>
       {/* Conversation history panel */}
       {historyOpen && (
         <div
