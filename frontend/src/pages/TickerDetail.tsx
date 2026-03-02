@@ -7,7 +7,7 @@ import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip,
 } from 'recharts'
-import { ArrowLeft, TrendingUp, TrendingDown, Minus, AlertTriangle, BarChart2 } from 'lucide-react'
+import { ArrowLeft, TrendingUp, TrendingDown, Minus, AlertTriangle, BarChart2, Loader } from 'lucide-react'
 import { ticker as tickerApi } from '@/lib/api'
 import type { SimulatedThesis } from '@/types/api'
 
@@ -224,10 +224,34 @@ export default function TickerDetail() {
         </div>
       </div>
 
+      {/* ── Data Coverage ── */}
+      <div className="flex gap-2 flex-wrap" style={{ marginBottom: 16 }}>
+        {([
+          { label: 'Prices', ok: priceHistory.length > 0 },
+          { label: 'Technicals', ok: !!ts && ts.rsi_14 != null },
+          { label: 'Theses', ok: theses.length > 0 },
+          { label: 'Alerts', ok: alerts.length > 0 },
+          { label: 'Backtests', ok: backtests.length > 0 },
+        ] as const).map(({ label, ok }) => (
+          <span
+            key={label}
+            className="pill"
+            style={{
+              fontSize: 9,
+              background: ok ? 'var(--color-success)' + '18' : 'hsl(228 15% 14%)',
+              color: ok ? 'var(--color-success)' : 'var(--color-text-dim)',
+              border: `1px solid ${ok ? 'var(--color-success)' + '40' : 'var(--color-border)'}`,
+            }}
+          >
+            {label}{ok ? '' : ' · pending'}
+          </span>
+        ))}
+      </div>
+
       {/* ── Price chart ── */}
-      {priceHistory.length > 0 && (
-        <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
-          <SectionHeader>90-Day Price</SectionHeader>
+      <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
+        <SectionHeader>90-Day Price</SectionHeader>
+        {priceHistory.length > 0 ? (
           <div style={{ height: 160 }}>
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={priceHistory} margin={{ top: 4, right: 4, left: -20, bottom: 0 }}>
@@ -265,11 +289,16 @@ export default function TickerDetail() {
               </AreaChart>
             </ResponsiveContainer>
           </div>
-        </div>
-      )}
+        ) : (
+          <div className="flex items-center gap-2 justify-center" style={{ height: 120, color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+            <Loader size={14} className="animate-spin" style={{ opacity: 0.5 }} />
+            Price data syncing — check back shortly.
+          </div>
+        )}
+      </div>
 
       {/* ── Technicals ── */}
-      {ts && (
+      {ts ? (
         <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
           <SectionHeader>Technicals — {ts.date}</SectionHeader>
           <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
@@ -296,6 +325,13 @@ export default function TickerDetail() {
             <StatChip label="SMA 20"  value={fmt(ts.sma_20, 2, '')} />
             <StatChip label="SMA 50"  value={fmt(ts.sma_50, 2, '')} />
             <StatChip label="SMA 200" value={fmt(ts.sma_200, 2, '')} />
+          </div>
+        </div>
+      ) : (
+        <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
+          <SectionHeader>Technicals</SectionHeader>
+          <div style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
+            Technicals will appear once price data is available.
           </div>
         </div>
       )}
