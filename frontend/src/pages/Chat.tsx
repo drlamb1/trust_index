@@ -217,6 +217,7 @@ export default function Chat() {
   const [isLoading, setIsLoading] = useState(false)
   const [isLoadingHistory, setIsLoadingHistory] = useState(false)
   const [historyOpen, setHistoryOpen] = useState(false)
+  const [confirmNewChat, setConfirmNewChat] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Conversation history
@@ -411,6 +412,21 @@ export default function Chat() {
     }
   }, [input, isLoading, activePersona, conversationId])
 
+  const startNewConversation = useCallback(() => {
+    localStorage.removeItem(convKey(activePersona))
+    setConversationId(null)
+    setMessages([])
+    setConfirmNewChat(false)
+  }, [activePersona])
+
+  const requestNewConversation = useCallback(() => {
+    if (messages.length > 0) {
+      setConfirmNewChat(true)
+    } else {
+      startNewConversation()
+    }
+  }, [messages.length, startNewConversation])
+
   const handleConvSelect = (conv: Conversation) => {
     localStorage.setItem(convKey(conv.active_persona), conv.id)
     setHistoryOpen(false)
@@ -460,11 +476,7 @@ export default function Chat() {
               History
             </span>
             <button
-              onClick={() => {
-                localStorage.removeItem(convKey(activePersona))
-                setConversationId(null)
-                setMessages([])
-              }}
+              onClick={requestNewConversation}
               title="New conversation"
               aria-label="New conversation"
               style={{ background: 'transparent', border: 'none', cursor: 'pointer', color: 'var(--color-text-dim)', padding: 2 }}
@@ -570,6 +582,7 @@ export default function Chat() {
                 cursor: 'pointer',
                 borderBottom: isActive ? `2px solid ${p.color}` : '2px solid transparent',
                 whiteSpace: 'nowrap',
+                opacity: isActive ? 1 : 0.7,
               }}
             >
               <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: 11 }}>
@@ -621,11 +634,7 @@ export default function Chat() {
         {/* New conversation button — always accessible */}
         {messages.length > 0 && (
           <button
-            onClick={() => {
-              localStorage.removeItem(convKey(activePersona))
-              setConversationId(null)
-              setMessages([])
-            }}
+            onClick={requestNewConversation}
             title="New conversation"
             style={{
               flexShrink: 0, width: 32, height: 32, borderRadius: 8,
@@ -671,6 +680,64 @@ export default function Chat() {
         </button>
       </div>
       </div>
+
+      {/* New conversation confirmation dialog */}
+      {confirmNewChat && (
+        <div
+          style={{
+            position: 'fixed', inset: 0, zIndex: 100,
+            background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+          }}
+          onClick={() => setConfirmNewChat(false)}
+        >
+          <div
+            className="glass"
+            onClick={e => e.stopPropagation()}
+            style={{
+              padding: '24px 28px', borderRadius: 12, maxWidth: 380,
+              border: '1px solid var(--color-border)',
+            }}
+          >
+            <h3 style={{
+              fontFamily: 'var(--font-sans)', fontSize: 14, fontWeight: 600,
+              color: 'var(--color-text-primary)', marginBottom: 8,
+            }}>
+              Start a new conversation?
+            </h3>
+            <p style={{
+              fontFamily: 'var(--font-sans)', fontSize: 12,
+              color: 'var(--color-text-muted)', marginBottom: 20, lineHeight: 1.5,
+            }}>
+              Your current conversation will be saved to history.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setConfirmNewChat(false)}
+                style={{
+                  padding: '6px 16px', borderRadius: 6,
+                  background: 'transparent', border: '1px solid var(--color-border)',
+                  color: 'var(--color-text-muted)', fontFamily: 'var(--font-sans)',
+                  fontSize: 12, cursor: 'pointer',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={startNewConversation}
+                style={{
+                  padding: '6px 16px', borderRadius: 6,
+                  background: 'var(--color-amber)', border: 'none',
+                  color: '#000', fontFamily: 'var(--font-sans)',
+                  fontSize: 12, fontWeight: 600, cursor: 'pointer',
+                }}
+              >
+                New Conversation
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   )
 }
