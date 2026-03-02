@@ -461,7 +461,7 @@ export default function Chat() {
 
 
   return (
-    <div className="flex" style={{ height: 'calc(100vh - 104px)' }}>
+    <div className="flex" style={{ height: 'calc(100vh - 56px)', margin: '-24px 0' }}>
       {/* Conversation history panel */}
       {historyOpen && (
         <div
@@ -526,7 +526,7 @@ export default function Chat() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
+      <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0 }}>
       {/* Persona selector — pinned at top of chat area */}
       <div
         className="flex gap-1.5 items-center"
