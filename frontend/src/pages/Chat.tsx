@@ -526,7 +526,7 @@ export default function Chat() {
       )}
 
       {/* Main chat area */}
-      <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0 }}>
+      <div className="flex flex-col flex-1" style={{ minWidth: 0, minHeight: 0, overflow: 'hidden' }}>
       {/* Persona selector — sticky at top, compact single-line tabs */}
       <div
         className="flex gap-1.5 pb-3 items-center"
