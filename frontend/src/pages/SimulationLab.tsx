@@ -9,7 +9,7 @@ import DecisionLog from '@/components/simulation/DecisionLog'
 import MLModelStatus from '@/components/simulation/MLModelStatus'
 import { simulation } from '@/lib/api'
 import type { SimulatedThesis, HestonParams, VolSurface } from '@/types/api'
-import { ChevronDown, ChevronUp } from 'lucide-react'
+import { ChevronDown, ChevronUp, MessageCircle } from 'lucide-react'
 
 // ─── Heston Params Panel ───
 
@@ -28,10 +28,26 @@ function HestonPanel({ ticker }: { ticker: string }) {
     { key: 'rho', label: 'ρ', desc: 'Price/vol correlation. Negative = put skew (leverage effect).' },
   ] as const
 
+  const navigate = useNavigate()
+
   if (isLoading) return <div style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>Loading Heston params…</div>
   if (!data || 'message' in data) return (
-    <div style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
-      No Heston calibration for {ticker}. Options data needed first.
+    <div style={{ fontSize: 11, fontFamily: 'var(--font-sans)' }}>
+      <div style={{ color: 'var(--color-text-dim)', marginBottom: 8, lineHeight: 1.6 }}>
+        Options data syncs automatically at market close. Check back tomorrow for {ticker} calibration.
+      </div>
+      <button
+        onClick={() => navigate('/chat?persona=heston_cal&message=' + encodeURIComponent('What is Heston calibration and why does it matter for options pricing?'))}
+        style={{
+          display: 'inline-flex', alignItems: 'center', gap: 4,
+          background: 'transparent', border: '1px solid var(--color-border)',
+          borderRadius: 6, padding: '4px 10px', cursor: 'pointer',
+          color: 'var(--color-cyan)', fontSize: 10, fontFamily: 'var(--font-sans)',
+        }}
+      >
+        <MessageCircle size={11} />
+        Learn about Heston calibration
+      </button>
     </div>
   )
 

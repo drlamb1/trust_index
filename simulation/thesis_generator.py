@@ -191,6 +191,17 @@ async def detect_signal_convergence(
 # ---------------------------------------------------------------------------
 
 
+VALID_RETIREMENT_REASONS = frozenset({
+    "duplicate",
+    "wrong_framing",
+    "market_exit",
+    "signal_decay",
+    "negative_sharpe",
+    "manual",
+    "unspecified",
+})
+
+
 async def generate_thesis(
     session: AsyncSession,
     convergence: dict,
@@ -208,6 +219,60 @@ async def generate_thesis(
         import anthropic
 
         from simulation.memory import inject_memories_into_prompt
+
+        # ── Duplicate detection: same ticker + same signal category ──
+        ticker_id = convergence.get("ticker_id")
+        if ticker_id:
+            # Infer category from signals
+            sig_text = json.dumps(convergence.get("signals", {})).lower()
+            if "momentum" in sig_text or "breakout" in sig_text or "rsi" in sig_text:
+                inferred_cat = "momentum"
+            elif "value" in sig_text or "pe " in sig_text or "undervalued" in sig_text:
+                inferred_cat = "value"
+            elif "earnings" in sig_text or "catalyst" in sig_text or "event" in sig_text:
+                inferred_cat = "event"
+            elif "macro" in sig_text or "fed" in sig_text or "rate" in sig_text:
+                inferred_cat = "macro"
+            else:
+                inferred_cat = None
+
+            # Check for existing active thesis with same ticker
+            active_statuses = [
+                ThesisStatus.PROPOSED.value,
+                ThesisStatus.BACKTESTING.value,
+                ThesisStatus.PAPER_LIVE.value,
+            ]
+            existing = await session.execute(
+                select(SimulatedThesis).where(
+                    SimulatedThesis.ticker_ids.contains([ticker_id]),
+                    SimulatedThesis.status.in_(active_statuses),
+                )
+            )
+            existing_theses = existing.scalars().all()
+
+            if existing_theses:
+                # Log suppression instead of creating + immediately killing
+                log_entry = SimulationLog(
+                    agent_name="thesis_lord",
+                    event_type="thesis_suppressed",
+                    event_data={
+                        "ticker_id": ticker_id,
+                        "ticker_symbol": convergence.get("ticker_symbol"),
+                        "inferred_category": inferred_cat,
+                        "existing_theses": [
+                            {"id": t.id, "name": t.name, "status": t.status}
+                            for t in existing_theses
+                        ],
+                        "reason": "Active thesis already exists for this ticker",
+                    },
+                )
+                session.add(log_entry)
+                logger.info(
+                    "Suppressed duplicate thesis for %s — %d active theses exist",
+                    convergence.get("ticker_symbol"),
+                    len(existing_theses),
+                )
+                return None
 
         client = anthropic.AsyncAnthropic(api_key=api_key)
 
@@ -325,6 +390,9 @@ async def retire_thesis(
     agent_name: str = "thesis_lord",
 ) -> SimulatedThesis | None:
     """Retire or kill a thesis with a documented reason."""
+    if not reason or not reason.strip():
+        raise ValueError("retirement_reason is required — use one of: " + ", ".join(sorted(VALID_RETIREMENT_REASONS)))
+    reason = reason.strip()
     result = await session.execute(
         select(SimulatedThesis).where(SimulatedThesis.id == thesis_id)
     )

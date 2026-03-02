@@ -339,6 +339,8 @@ async def score_ticker(session: AsyncSession, ticker: Ticker) -> DipContext | No
     )
     ins_count, ins_value = insider_result.one()
     ctx.insider_activity = _score_insider(ins_count or 0, float(ins_value or 0))
+    if (ins_count or 0) == 0:
+        logger.debug("No insider trades found for %s — insider score is 0", ticker.symbol)
 
     # ------------------------------------------------------------------
     # 6. Sector relative: compare to SPY over last 5 days
