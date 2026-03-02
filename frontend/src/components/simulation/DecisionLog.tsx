@@ -52,20 +52,48 @@ function LogEntry({ entry }: { entry: SimulationLog }) {
   )
 }
 
-const EVENT_TYPES = ['All', 'thesis_created', 'backtest_complete', 'position_opened', 'position_closed', 'signal_detected', 'thesis_killed', 'DAILY_BRIEFING', 'pr_merge', 'BACKTEST_START', 'BACKTEST_COMPLETE']
+const INTEL_EVENTS = ['thesis_created', 'backtest_complete', 'position_opened', 'position_closed', 'signal_detected', 'thesis_killed', 'DAILY_BRIEFING']
+const SYSTEM_EVENT_TYPES = ['pr_merge', 'BACKTEST_START', 'BACKTEST_COMPLETE']
+
+type MetaFilter = 'Intelligence' | 'System' | 'All'
+const META_FILTERS: MetaFilter[] = ['Intelligence', 'System', 'All']
+
+function metaFilterToEventTypes(meta: MetaFilter): string[] | undefined {
+  switch (meta) {
+    case 'Intelligence': return INTEL_EVENTS
+    case 'System': return SYSTEM_EVENT_TYPES
+    case 'All': return undefined
+  }
+}
 
 export default function DecisionLog() {
-  const [filter, setFilter] = useState('All')
+  const [metaFilter, setMetaFilter] = useState<MetaFilter>('Intelligence')
+  const [detailFilter, setDetailFilter] = useState<string | null>(null)
   const [limit, setLimit] = useState(30)
 
+  // When a detail filter is active, use it directly; otherwise expand the meta-filter
+  const activeEventType = detailFilter ?? undefined
+  const allowedTypes = metaFilterToEventTypes(metaFilter)
+
   const { data: entries = [] } = useQuery({
-    queryKey: ['decision-log', filter, limit],
+    queryKey: ['decision-log', metaFilter, detailFilter, limit],
     queryFn: () => simulation.decisionLog({
-      event_type: filter === 'All' ? undefined : filter,
+      event_type: activeEventType,
       limit,
     }),
     refetchInterval: 60_000,
+    select: (data) => {
+      // Client-side filter when using meta-filter (no detail filter)
+      if (!detailFilter && allowedTypes) {
+        return data.filter((e: SimulationLog) => allowedTypes.includes(e.event_type))
+      }
+      return data
+    },
   })
+
+  const detailPills = metaFilter === 'Intelligence' ? INTEL_EVENTS
+    : metaFilter === 'System' ? SYSTEM_EVENT_TYPES
+    : [...INTEL_EVENTS, ...SYSTEM_EVENT_TYPES]
 
   return (
     <div>
@@ -75,21 +103,42 @@ export default function DecisionLog() {
         </h3>
       </div>
 
-      {/* Filter pills */}
-      <div className="flex gap-1 flex-wrap" style={{ marginBottom: 12 }}>
-        {EVENT_TYPES.map(t => (
+      {/* Meta-filter row */}
+      <div className="flex gap-1 flex-wrap" style={{ marginBottom: 6 }}>
+        {META_FILTERS.map(f => (
           <button
-            key={t}
-            onClick={() => setFilter(t)}
+            key={f}
+            onClick={() => { setMetaFilter(f); setDetailFilter(null) }}
             className="pill"
             style={{
               cursor: 'pointer',
-              background: filter === t ? 'var(--color-amber-muted)' : 'hsl(228 15% 14%)',
-              color: filter === t ? 'var(--color-amber)' : 'var(--color-text-dim)',
-              border: `1px solid ${filter === t ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+              background: metaFilter === f ? 'var(--color-amber-muted)' : 'hsl(228 15% 14%)',
+              color: metaFilter === f ? 'var(--color-amber)' : 'var(--color-text-dim)',
+              border: `1px solid ${metaFilter === f ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+              fontWeight: 600,
             }}
           >
-            {t === 'All' ? 'All' : t.replace(/_/g, ' ')}
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {/* Detail filter row */}
+      <div className="flex gap-1 flex-wrap" style={{ marginBottom: 12 }}>
+        {detailPills.map(t => (
+          <button
+            key={t}
+            onClick={() => setDetailFilter(detailFilter === t ? null : t)}
+            className="pill"
+            style={{
+              cursor: 'pointer',
+              background: detailFilter === t ? 'var(--color-amber-muted)' : 'hsl(228 15% 14%)',
+              color: detailFilter === t ? 'var(--color-amber)' : 'var(--color-text-dim)',
+              border: `1px solid ${detailFilter === t ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
+              fontSize: 9,
+            }}
+          >
+            {t.replace(/_/g, ' ')}
           </button>
         ))}
       </div>
