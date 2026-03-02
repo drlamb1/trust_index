@@ -69,15 +69,22 @@ export default function Settings() {
             { label: 'Email', value: user?.email },
             { label: 'Username', value: user?.username },
             { label: 'Role', value: user?.role },
-            { label: 'Token Budget', value: user?.daily_token_budget != null ? `${(user.tokens_used_today ?? 0).toLocaleString()} / ${user.daily_token_budget.toLocaleString()}` : undefined },
-          ].map(({ label, value }) => (
-            <div key={label} className="flex items-center justify-between" style={{ padding: '4px 0' }}>
-              <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
-                {label}
-              </span>
-              <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-primary)' }}>
-                {value ?? '—'}
-              </span>
+            { label: 'Token Budget', value: user?.daily_token_budget != null ? `${(user.tokens_used_today ?? 0).toLocaleString()} / ${user.daily_token_budget.toLocaleString()}` : 'Unlimited', subtitle: 'Daily AI conversation allowance. Resets at midnight UTC.' },
+          ].map(({ label, value, subtitle }) => (
+            <div key={label} style={{ padding: '4px 0' }}>
+              <div className="flex items-center justify-between">
+                <span style={{ fontFamily: 'var(--font-sans)', fontSize: 11, color: 'var(--color-text-dim)', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 600 }}>
+                  {label}
+                </span>
+                <span style={{ fontFamily: 'var(--font-mono)', fontSize: 12, color: 'var(--color-text-primary)' }}>
+                  {value ?? '—'}
+                </span>
+              </div>
+              {subtitle && (
+                <div style={{ fontFamily: 'var(--font-sans)', fontSize: 10, color: 'var(--color-text-dim)', marginTop: 2 }}>
+                  {subtitle}
+                </div>
+              )}
             </div>
           ))}
         </div>

@@ -3,7 +3,7 @@
 // Edges = signal correlation
 // Click node → emit onThesisSelect
 
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import { simulation } from '@/lib/api'
@@ -47,6 +47,8 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
   })
 
   const graphRef = useRef<any>(null)
+  const [hoveredNode, setHoveredNode] = useState<string | null>(null)
+  const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
 
   // Build graph data from theses
   const graphData = useCallback(() => {
@@ -133,7 +135,7 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
       </div>
 
       {/* Force graph */}
-      <div className="constellation-canvas" style={{ borderRadius: 8, overflow: 'hidden', flexShrink: 0 }}>
+      <div className="constellation-canvas" style={{ borderRadius: 8, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
         <ForceGraph2D
           ref={graphRef}
           graphData={data}
@@ -152,10 +154,29 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
           onNodeHover={(node: any) => {
             const el = graphRef.current?.['_canvas'] as HTMLCanvasElement | undefined
             if (el) el.style.cursor = node ? 'pointer' : 'default'
+            setHoveredNode(node ? String(node.id) : null)
+            if (node && graphRef.current) {
+              const coords = graphRef.current.graph2ScreenCoords(node.x, node.y)
+              const t = node.thesis as SimulatedThesis | undefined
+              const ticker = t?.ticker_symbol ?? ''
+              const status = t?.status ? ` · ${t.status.replace('_', ' ')}` : ''
+              setTooltip({ x: coords.x, y: coords.y, text: `${node.label}${ticker ? ` (${ticker})` : ''}${status}` })
+            } else {
+              setTooltip(null)
+            }
           }}
           nodeCanvasObject={(node: any, ctx, globalScale) => {
-            const r = node.radius
+            const r = node.radius * 1.5 // Increased size for better click targets
             const color = node.color
+            const isHovered = hoveredNode === String(node.id)
+
+            // Hover glow ring
+            if (isHovered) {
+              ctx.beginPath()
+              ctx.arc(node.x, node.y, r + 6, 0, 2 * Math.PI)
+              ctx.fillStyle = color.replace(')', ' / 0.3)')
+              ctx.fill()
+            }
 
             // Outer glow for live theses
             if (node.thesis?.status === 'paper_live') {
@@ -183,6 +204,26 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
           cooldownTicks={100}
           onEngineStop={() => graphRef.current?.zoomToFit(400, 40)}
         />
+        {/* Hover tooltip */}
+        {tooltip && (
+          <div style={{
+            position: 'absolute',
+            left: tooltip.x + 12,
+            top: tooltip.y - 8,
+            pointerEvents: 'none',
+            background: 'hsl(228 18% 10%)',
+            border: '1px solid var(--color-border)',
+            borderRadius: 6,
+            padding: '4px 8px',
+            fontFamily: 'var(--font-sans)',
+            fontSize: 10,
+            color: 'var(--color-text-primary)',
+            whiteSpace: 'nowrap',
+            zIndex: 10,
+          }}>
+            {tooltip.text}
+          </div>
+        )}
       </div>
 
       {/* Legend */}
