@@ -39,6 +39,7 @@ export default function VolSurfaceHeatmap({ ticker }: { ticker: string }) {
   }
 
   // Transform into Nivo HeatMap format — use null for missing cells
+  // Abbreviate expiry labels: "30d" instead of full
   const heatmapData = expiries.map((exp, i) => ({
     id: `${exp}d`,
     data: moneyness.map((m, j) => ({
@@ -47,20 +48,27 @@ export default function VolSurfaceHeatmap({ ticker }: { ticker: string }) {
     })),
   }))
 
+  // Reduce tick density to ~8 labels max
+  const moneynessTicks = moneyness.length > 8
+    ? moneyness.filter((_, i) => i % Math.ceil(moneyness.length / 8) === 0).map(m => `${(m * 100).toFixed(0)}%`)
+    : undefined
+
   return (
     <div>
       <div style={{ height: 220 }} className="vol-heatmap">
         <ResponsiveHeatMap
           data={heatmapData}
-          margin={{ top: 20, right: 20, bottom: 40, left: 50 }}
+          margin={{ top: 20, right: 20, bottom: 50, left: 50 }}
           axisTop={null}
           axisRight={null}
           axisBottom={{
             tickSize: 0,
             tickPadding: 8,
+            tickRotation: -45,
+            tickValues: moneynessTicks,
             legend: 'Moneyness',
             legendPosition: 'middle' as const,
-            legendOffset: 30,
+            legendOffset: 40,
           }}
           axisLeft={{
             tickSize: 0,

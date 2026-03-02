@@ -51,7 +51,7 @@ function MemoryCard({ memory }: { memory: AgentMemory }) {
       </div>
       <div style={{ display: 'flex', gap: 12, fontSize: 10, color: 'var(--color-text-dim)', fontFamily: 'var(--font-mono)' }}>
         <span style={{ color: agentColor(memory.agent_name) }}>{memory.agent_name}</span>
-        <span>accessed {memory.access_count}×</span>
+        <span>{memory.access_count > 0 ? `accessed ${memory.access_count}×` : 'new'}</span>
       </div>
     </div>
   )
