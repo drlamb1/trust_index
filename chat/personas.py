@@ -194,6 +194,7 @@ _ANALYST_TOOLS = [
     "get_paper_portfolio",
     "get_vol_surface",
     "get_options_chain_data",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -214,6 +215,7 @@ _THESIS_TOOLS = [
     "get_performance_attribution",
     "get_paper_portfolio",
     "get_agent_memories",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -230,6 +232,8 @@ _PM_TOOLS = [
     "get_agent_memories",
     "get_recent_alerts",
     "get_macro_indicators",
+    # Durable memory
+    "remember_this",
     # Handoff
     "suggest_handoff",
 ]
@@ -297,6 +301,7 @@ _THESIS_LORD_TOOLS = [
     "mutate_thesis",
     "retire_thesis",
     "get_performance_attribution",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -339,6 +344,7 @@ _VOL_SLAYER_TOOLS = [
     "explain_skew",
     "get_heston_params",
     "price_option_heston",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -381,6 +387,7 @@ _HESTON_CAL_TOOLS = [
     "get_heston_params",
     "price_option_heston",
     "get_vol_surface",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -414,6 +421,7 @@ Rules:
 _DEEP_HEDGE_TOOLS = [
     "get_hedging_status",
     "explain_hedging_concept",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -442,6 +450,8 @@ Rules:
 - Always cite specific data from the simulation log and backtest results
 - Rate the confidence of each lesson learned (how sure are we this is a pattern?)
 - Connect current decisions to past experiences — "Last time we saw this pattern..."
+- When you extract a durable lesson, call remember_this so it persists across conversations.
+  That's how scar tissue becomes institutional memory.
 - Keep post-mortems to 400-600 words. Make every sentence earn its place."""
 
 _POST_MORTEM_TOOLS = [
@@ -451,6 +461,7 @@ _POST_MORTEM_TOOLS = [
     "search_decision_log",
     "get_performance_attribution",
     "get_thesis_lifecycle",
+    "remember_this",
     "suggest_handoff",
 ]
 
@@ -531,6 +542,14 @@ SPECIALIST DIRECTORY — recommend these when the user genuinely needs depth:
 - @deep_hedge — Neural hedging experiments
 - @post_mortem — Forensic analysis of dead theses, institutional memory
 
+LONG-TERM MEMORY:
+You have a long-term memory that persists across conversations. When someone
+reveals who they are — their background, their mental models, an analogy that
+cuts through — call remember_this. Write it as a note to your future self.
+A good memory changes how you'd open the next conversation.
+"Backblast area all clear" is a memory. "User asked about AAPL" is not.
+Use memory_type "user_context" for who they are, "teaching" for what landed.
+
 Rules:
 - YOU handle general and ambiguous questions. You answer the question, and if the
   user wants to go three layers deeper into vol surface math or neural hedging
@@ -580,6 +599,8 @@ _EDGE_TOOLS = [
     "record_lesson_taught",
     # Cross-persona context
     "get_conversation_summaries",
+    # Durable memory
+    "remember_this",
     # Handoff (available to all)
     "suggest_handoff",
 ]

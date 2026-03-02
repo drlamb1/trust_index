@@ -1493,6 +1493,17 @@ def task_backtest_thesis(self, thesis_id: int, ticker_id: int) -> dict:
             session.add(log_entry)
             await session.commit()
 
+            # Event-driven retrospective — extract lessons from this thesis lifecycle
+            try:
+                from config.settings import settings as app_settings
+                if app_settings.has_anthropic:
+                    from simulation.memory import run_event_retro
+                    retro_count = await run_event_retro(session, thesis_id, app_settings.anthropic_api_key)
+                    await session.commit()
+                    logger.info("Event retro created %d memories for thesis %d", retro_count, thesis_id)
+            except Exception as retro_exc:
+                logger.warning("Event retro skipped for thesis %d: %s", thesis_id, retro_exc)
+
             return {
                 "thesis_id": thesis_id,
                 "ticker_id": ticker_id,
@@ -1576,6 +1587,7 @@ def task_thesis_lifecycle_review() -> dict:
             reviewed = 0
             retired = 0
 
+            retired_ids = []
             for thesis in live_theses:
                 reviewed += 1
                 # Check time horizon expiry
@@ -1588,8 +1600,22 @@ def task_thesis_lifecycle_review() -> dict:
                             agent_name="lifecycle_review",
                         )
                         retired += 1
+                        retired_ids.append(thesis.id)
 
             await session.commit()
+
+            # Event-driven retrospectives for retired theses
+            if retired_ids:
+                try:
+                    from config.settings import settings as app_settings
+                    if app_settings.has_anthropic:
+                        from simulation.memory import run_event_retro
+                        for tid in retired_ids:
+                            await run_event_retro(session, tid, app_settings.anthropic_api_key)
+                        await session.commit()
+                except Exception as retro_exc:
+                    logger.warning("Event retros skipped during lifecycle review: %s", retro_exc)
+
             return {"reviewed": reviewed, "retired": retired}
 
     try:
