@@ -6,6 +6,7 @@
 import { useRef, useState, useCallback } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
+import { Info } from 'lucide-react'
 import { simulation } from '@/lib/api'
 import type { SimulatedThesis } from '@/types/api'
 
@@ -49,6 +50,7 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
   const graphRef = useRef<any>(null)
   const [hoveredNode, setHoveredNode] = useState<string | null>(null)
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
+  const [showGuide, setShowGuide] = useState(false)
 
   // Build graph data from theses
   const graphData = useCallback(() => {
@@ -130,9 +132,44 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
           Thesis Constellation
         </h2>
       </div>
-      <div style={{ color: 'var(--color-text-dim)', fontSize: 11, marginBottom: 8, flexShrink: 0 }}>
-        Signal correlations · confidence-weighted
+      <div className="flex items-center gap-2" style={{ marginBottom: 8, flexShrink: 0 }}>
+        <span style={{ color: 'var(--color-text-dim)', fontSize: 11 }}>
+          Signal correlations · confidence-weighted
+        </span>
+        <button
+          onClick={() => setShowGuide(g => !g)}
+          title="How to read this"
+          style={{
+            background: showGuide ? 'var(--color-amber-muted)' : 'transparent',
+            border: showGuide ? '1px solid var(--color-amber-dim)' : '1px solid transparent',
+            borderRadius: 4, padding: 2, cursor: 'pointer',
+            color: showGuide ? 'var(--color-amber)' : 'var(--color-text-dim)',
+            display: 'flex', alignItems: 'center',
+          }}
+        >
+          <Info size={12} />
+        </button>
       </div>
+      {showGuide && (
+        <div
+          className="glass-sm"
+          style={{
+            padding: '10px 14px', marginBottom: 8, flexShrink: 0,
+            fontSize: 11, lineHeight: 1.6, color: 'var(--color-text-muted)',
+            fontFamily: 'var(--font-sans)',
+          }}
+        >
+          <div style={{ fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 4 }}>
+            Reading the Constellation
+          </div>
+          <div><span style={{ color: 'var(--color-amber)' }}>Proximity</span> — theses targeting the same ticker cluster together. Faint lines show shared tickers.</div>
+          <div><span style={{ color: 'var(--color-amber)' }}>Dot size</span> — conviction by lifecycle stage. Paper-live (largest) → backtesting → proposed (smallest).</div>
+          <div><span style={{ color: 'var(--color-amber)' }}>Color</span> — thesis category: momentum, value, event-driven, or macro.</div>
+          <div style={{ marginTop: 4, color: 'var(--color-text-dim)', fontSize: 10 }}>
+            Click a dot or a name below to explore.
+          </div>
+        </div>
+      )}
 
       {/* Force graph */}
       <div className="constellation-canvas" style={{ borderRadius: 8, overflow: 'hidden', flexShrink: 0, position: 'relative' }}>
