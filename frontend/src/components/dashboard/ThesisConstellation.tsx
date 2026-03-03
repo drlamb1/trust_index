@@ -3,7 +3,7 @@
 // Edges = signal correlation
 // Click node → emit onThesisSelect
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useMemo } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import ForceGraph2D from 'react-force-graph-2d'
 import { Info } from 'lucide-react'
@@ -52,8 +52,9 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
   const [tooltip, setTooltip] = useState<{ x: number; y: number; text: string } | null>(null)
   const [showGuide, setShowGuide] = useState(false)
 
-  // Build graph data from theses
-  const graphData = useCallback(() => {
+  // Build graph data from theses — useMemo keeps the object stable across re-renders
+  // so ForceGraph doesn't restart the physics simulation on hover/tooltip state changes
+  const data = useMemo(() => {
     if (!theses.length) return { nodes: [], links: [] }
 
     const nodes = theses.map(t => ({
@@ -79,8 +80,6 @@ export default function ThesisConstellation({ onThesisSelect, height = 400 }: Pr
 
     return { nodes, links }
   }, [theses])
-
-  const data = graphData()
 
   // Empty / error state
   if (!theses.length || isError) {
