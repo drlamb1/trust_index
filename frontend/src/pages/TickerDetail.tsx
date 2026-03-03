@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { useQuery } from '@tanstack/react-query'
 import {
   AreaChart, Area, ResponsiveContainer, XAxis, YAxis, Tooltip,
@@ -108,6 +109,7 @@ function ThesisRow({ thesis }: { thesis: SimulatedThesis }) {
 export default function TickerDetail() {
   const { symbol = '' } = useParams<{ symbol: string }>()
   const sym = symbol.toUpperCase()
+  const isMobile = useIsMobile()
   const [alertLimit, setAlertLimit] = useState(30)
   const [thesisLimit, setThesisLimit] = useState(20)
   const [backtestLimit, setBacktestLimit] = useState(20)
@@ -337,10 +339,10 @@ export default function TickerDetail() {
       )}
 
       {/* ── Middle row: Theses + Alerts ── */}
-      <div className="flex gap-4" style={{ marginBottom: 16, alignItems: 'flex-start' }}>
+      <div className={isMobile ? 'flex flex-col gap-4' : 'flex gap-4'} style={{ marginBottom: 16, alignItems: 'flex-start' }}>
 
         {/* Theses */}
-        <div className="glass flex-1" style={{ padding: '20px 24px' }}>
+        <div className="glass flex-1" style={{ padding: isMobile ? '16px' : '20px 24px' }}>
           <SectionHeader>Linked Theses</SectionHeader>
           {theses.length === 0 ? (
             <div style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
@@ -368,7 +370,7 @@ export default function TickerDetail() {
         </div>
 
         {/* Alerts */}
-        <div className="glass" style={{ padding: '20px 24px', width: 280, flexShrink: 0 }}>
+        <div className="glass" style={{ padding: isMobile ? '16px' : '20px 24px', ...(isMobile ? {} : { width: 280, flexShrink: 0 }) }}>
           <SectionHeader>Recent Alerts</SectionHeader>
           {alerts.length === 0 ? (
             <div style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
@@ -422,7 +424,8 @@ export default function TickerDetail() {
           </div>
         ) : (
           <>
-          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11 }}>
+          <div style={{ overflowX: 'auto', WebkitOverflowScrolling: 'touch' }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11, minWidth: isMobile ? 600 : undefined }}>
             <thead>
               <tr>
                 {['Thesis', 'Sharpe', 'Sortino', 'Win %', 'Max DD', 'Trades', 'p-val', 'Run'].map(h => (
@@ -463,6 +466,7 @@ export default function TickerDetail() {
               ))}
             </tbody>
           </table>
+          </div>
           {backtests.length >= backtestLimit && (
             <button
               onClick={() => setBacktestLimit(l => l + 20)}

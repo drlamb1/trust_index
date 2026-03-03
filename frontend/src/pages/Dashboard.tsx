@@ -3,6 +3,7 @@
 
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
+import { useIsMobile } from '@/lib/useIsMobile'
 import { X, BarChart2 } from 'lucide-react'
 import MarketPulse from '@/components/dashboard/MarketPulse'
 import ThesisConstellation from '@/components/dashboard/ThesisConstellation'
@@ -20,7 +21,7 @@ const STATUS_COLOR: Record<string, string> = {
   killed:      'var(--color-danger)',
 }
 
-function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: () => void }) {
+function ThesisDrawer({ thesis, onClose, isMobile }: { thesis: SimulatedThesis; onClose: () => void; isMobile?: boolean }) {
   const navigate = useNavigate()
   const color = STATUS_COLOR[thesis.status] ?? 'var(--color-text-muted)'
 
@@ -28,8 +29,11 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
     <div
       className="glass"
       style={{
-        position: 'fixed', right: 24, top: 72, bottom: 24, width: 380,
-        overflowY: 'auto', zIndex: 100, padding: '24px',
+        position: 'fixed',
+        ...(isMobile
+          ? { left: 8, right: 8, top: 64, bottom: 8 }
+          : { right: 24, top: 72, bottom: 24, width: 380 }),
+        overflowY: 'auto', zIndex: 100, padding: isMobile ? '16px' : '24px',
         boxShadow: '0 0 40px hsl(228 22% 5% / 0.8)',
       }}
     >
@@ -120,6 +124,7 @@ function ThesisDrawer({ thesis, onClose }: { thesis: SimulatedThesis; onClose: (
 }
 
 export default function Dashboard() {
+  const isMobile = useIsMobile()
   const [selectedThesis, setSelectedThesis] = useState<SimulatedThesis | null>(null)
   const [showOnboarding, setShowOnboarding] = useState(
     () => !localStorage.getItem('ef_onboarding_done')
@@ -137,24 +142,24 @@ export default function Dashboard() {
       <MarketPulse />
 
       {/* Middle row — Constellation (55%) + Simulation Engine (45%) */}
-      <div className="flex gap-4" style={{ alignItems: 'stretch' }}>
-        <div style={{ flex: '0 0 55%' }}>
+      <div className={isMobile ? 'flex flex-col gap-4' : 'flex gap-4'} style={{ alignItems: 'stretch' }}>
+        <div style={isMobile ? {} : { flex: '0 0 55%' }}>
           <ThesisConstellation
-            height={420}
+            height={isMobile ? 300 : 420}
             onThesisSelect={setSelectedThesis}
           />
         </div>
-        <div style={{ flex: '0 0 calc(45% - 16px)' }}>
+        <div style={isMobile ? {} : { flex: '0 0 calc(45% - 16px)' }}>
           <SimulationEngine />
         </div>
       </div>
 
       {/* Bottom row — Intelligence Feed (55%) + Agent Console (45%) */}
-      <div className="flex gap-4">
-        <div style={{ flex: '0 0 55%' }}>
+      <div className={isMobile ? 'flex flex-col gap-4' : 'flex gap-4'}>
+        <div style={isMobile ? {} : { flex: '0 0 55%' }}>
           <IntelligenceFeed />
         </div>
-        <div style={{ flex: '0 0 calc(45% - 16px)' }}>
+        <div style={isMobile ? {} : { flex: '0 0 calc(45% - 16px)' }}>
           <AgentConsole />
         </div>
       </div>
@@ -163,6 +168,7 @@ export default function Dashboard() {
         <ThesisDrawer
           thesis={selectedThesis}
           onClose={() => setSelectedThesis(null)}
+          isMobile={isMobile}
         />
       )}
     </div>

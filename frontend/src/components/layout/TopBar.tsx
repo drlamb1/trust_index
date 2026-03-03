@@ -1,10 +1,10 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search } from 'lucide-react'
+import { Search, Menu } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { tickers } from '@/lib/api'
 
-function Clock() {
+function Clock({ compact }: { compact?: boolean }) {
   const [time, setTime] = useState(new Date())
 
   useEffect(() => {
@@ -12,17 +12,18 @@ function Clock() {
     return () => clearInterval(interval)
   }, [])
 
-  const fmt = time.toLocaleString('en-US', {
-    weekday: 'short', month: 'short', day: 'numeric',
-    hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
-  })
+  const fmt = compact
+    ? time.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    : time.toLocaleString('en-US', {
+        weekday: 'short', month: 'short', day: 'numeric',
+        hour: '2-digit', minute: '2-digit', timeZoneName: 'short',
+      })
 
   // Market hours in ET (Mon-Fri 9:30-16:00)
-  // Convert to ET properly — handles EST/EDT automatically
   const et = new Date(time.toLocaleString('en-US', { timeZone: 'America/New_York' }))
   const etDay = et.getDay()
   const etMinutes = et.getHours() * 60 + et.getMinutes()
-  const marketOpen = etDay >= 1 && etDay <= 5 && etMinutes >= 570 && etMinutes < 960 // 9:30-16:00 ET
+  const marketOpen = etDay >= 1 && etDay <= 5 && etMinutes >= 570 && etMinutes < 960
 
   return (
     <div className="flex items-center gap-2" style={{ color: 'var(--color-text-muted)', fontSize: 11 }}>
@@ -35,13 +36,13 @@ function Clock() {
           border: `1px solid ${marketOpen ? 'hsl(142 40% 25%)' : 'var(--color-border)'}`,
         }}
       >
-        {marketOpen ? 'Markets Open' : 'Markets Closed'}
+        {marketOpen ? 'Open' : 'Closed'}
       </span>
     </div>
   )
 }
 
-function TickerSearch() {
+function TickerSearch({ compact }: { compact?: boolean }) {
   const [value, setValue] = useState('')
   const [focused, setFocused] = useState(false)
   const [selectedIdx, setSelectedIdx] = useState(-1)
@@ -52,8 +53,8 @@ function TickerSearch() {
   const { data: tickerList = [] } = useQuery({
     queryKey: ['ticker-list'],
     queryFn: tickers.list,
-    staleTime: 60 * 60_000, // 1 hour
-    enabled: focused, // only fetch on first focus
+    staleTime: 60 * 60_000,
+    enabled: focused,
   })
 
   const query = value.trim().toUpperCase()
@@ -104,7 +105,7 @@ function TickerSearch() {
         style={{
           background: 'hsl(228 18% 11%)',
           border: `1px solid ${focused ? 'var(--color-amber-dim)' : 'var(--color-border)'}`,
-          width: 200,
+          width: compact ? 140 : 200,
           transition: 'border-color 0.15s',
         }}
       >
@@ -116,7 +117,7 @@ function TickerSearch() {
           onFocus={() => { setFocused(true); clearTimeout(blurTimeout.current) }}
           onBlur={() => { blurTimeout.current = setTimeout(() => setFocused(false), 150) }}
           onKeyDown={handleKeyDown}
-          placeholder="Search tickers…"
+          placeholder={compact ? 'Search…' : 'Search tickers…'}
           style={{
             flex: 1,
             background: 'transparent',
@@ -166,12 +167,12 @@ function TickerSearch() {
   )
 }
 
-export default function TopBar() {
+export default function TopBar({ isMobile, onMenuToggle }: { isMobile?: boolean; onMenuToggle?: () => void }) {
   return (
     <header
-      className="fixed top-0 right-0 flex items-center justify-between px-6"
+      className="fixed top-0 right-0 flex items-center justify-between px-4 md:px-6"
       style={{
-        left: 88,
+        left: isMobile ? 0 : 88,
         height: 56,
         background: 'hsl(228 22% 7% / 0.8)',
         backdropFilter: 'blur(12px)',
@@ -179,18 +180,29 @@ export default function TopBar() {
         zIndex: 40,
       }}
     >
-      {/* Logo text */}
-      <div style={{ fontFamily: 'var(--font-sans)', fontSize: 18, fontWeight: 600, letterSpacing: '-0.01em' }}>
-        <span style={{ color: 'var(--color-text-primary)' }}>Edge</span>
-        <span style={{ color: 'var(--color-amber)' }}>Finder</span>
+      {/* Left — hamburger (mobile) or logo (desktop) */}
+      <div className="flex items-center gap-3">
+        {isMobile && onMenuToggle && (
+          <button
+            onClick={onMenuToggle}
+            style={{ background: 'none', border: 'none', color: 'var(--color-text-muted)', cursor: 'pointer', padding: 4 }}
+          >
+            <Menu size={20} />
+          </button>
+        )}
+        <div style={{ fontFamily: 'var(--font-sans)', fontSize: isMobile ? 16 : 18, fontWeight: 600, letterSpacing: '-0.01em' }}>
+          <span style={{ color: 'var(--color-text-primary)' }}>Edge</span>
+          <span style={{ color: 'var(--color-amber)' }}>Finder</span>
+        </div>
       </div>
 
-      {/* Center — clock */}
-      <Clock />
+      {/* Center — clock (hidden on very small screens, compact on mobile) */}
+      {!isMobile && <Clock />}
+      {isMobile && <Clock compact />}
 
       {/* Right — search */}
       <div className="flex items-center gap-3">
-        <TickerSearch />
+        <TickerSearch compact={isMobile} />
       </div>
     </header>
   )
