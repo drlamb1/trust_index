@@ -7,7 +7,7 @@ DAYS    ?= 365       # override with: make ingest-prices DAYS=90
 .PHONY: help \
         up down logs \
         docker-build docker-up docker-down \
-        status init migrate worker serve run \
+        status init setup migrate worker serve run \
         create-admin test test-unit \
         ingest-prices ingest-filings ingest-insider ingest-news ingest-macro ingest-transcripts \
         ticker-list \
@@ -23,6 +23,7 @@ help:
 	@echo "  EdgeFinder — Make Targets"
 	@echo ""
 	@echo "  ── Local Dev ─────────────────────────────────────"
+	@echo "    make setup              Set up git hooks (run once after clone)"
 	@echo "    make init               First-time: Redis + migrate + seed"
 	@echo "    make serve              Web dashboard  http://localhost:8050"
 	@echo "    make worker             Celery worker + beat (all queues)"
@@ -111,7 +112,11 @@ create-admin:
 status: up
 	$(PYTHON) cli.py status
 
-init: up migrate
+setup:
+	git config core.hooksPath .githooks
+	@echo "Git hooks configured (.githooks/)"
+
+init: setup up migrate
 	$(PYTHON) cli.py init --skip-sp500
 
 worker: up
