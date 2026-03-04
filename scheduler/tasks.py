@@ -324,6 +324,12 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=0, hour=22, day_of_week=0),
         "options": {"queue": "simulation"},
     },
+    # Merkle anchor — daily 11:15 PM UTC (after thesis lifecycle review)
+    "compute-merkle-anchor": {
+        "task": "scheduler.tasks.task_compute_merkle_anchor",
+        "schedule": crontab(minute=15, hour=23),
+        "options": {"queue": "simulation"},
+    },
     # ================================================================
     # EVAL / SELF-LEARNING TASKS
     # ================================================================
@@ -2149,4 +2155,143 @@ def task_train_deep_hedging() -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_train_deep_hedging failed: %s", exc)
+        raise
+
+
+# ---------------------------------------------------------------------------
+# MERKLE ANCHORING — tamper-evident integrity for the simulation log
+# ---------------------------------------------------------------------------
+
+
+@celery_app.task(name="scheduler.tasks.task_compute_merkle_anchor")
+def task_compute_merkle_anchor():
+    """Compute daily Merkle root over yesterday's simulation log entries.
+
+    Runs nightly at 23:15 UTC. Hashes any un-hashed entries first, then
+    builds a Merkle tree over the day's hashes and stores the root.
+    """
+
+    async def _run():
+        from datetime import datetime, timedelta, timezone
+
+        from sqlalchemy import select, update
+
+        from core.database import AsyncSessionLocal
+        from core.models import MerkleAnchor, SimulationLog
+        from simulation.merkle import build_merkle_tree, compute_entry_hash
+
+        yesterday = (datetime.now(timezone.utc) - timedelta(days=1)).date()
+        day_start = datetime(yesterday.year, yesterday.month, yesterday.day, tzinfo=timezone.utc)
+        day_end = day_start + timedelta(days=1)
+
+        async with AsyncSessionLocal() as session:
+            # Grab all entries for the target day
+            result = await session.execute(
+                select(SimulationLog)
+                .where(SimulationLog.created_at >= day_start)
+                .where(SimulationLog.created_at < day_end)
+                .order_by(SimulationLog.id)
+            )
+            entries = result.scalars().all()
+
+            if not entries:
+                logger.info("merkle: no entries for %s, skipping", yesterday)
+                return {"date": str(yesterday), "status": "empty"}
+
+            # Backfill any missing content hashes
+            for entry in entries:
+                if not entry.content_hash:
+                    entry.content_hash = compute_entry_hash(
+                        agent_name=entry.agent_name,
+                        event_type=entry.event_type,
+                        event_data=entry.event_data,
+                        created_at=entry.created_at,
+                        thesis_id=entry.thesis_id,
+                    )
+            await session.flush()
+
+            # Build Merkle tree
+            hashes = [e.content_hash for e in entries]
+            root, _ = build_merkle_tree(hashes)
+
+            # Upsert the anchor
+            existing = await session.execute(
+                select(MerkleAnchor).where(
+                    MerkleAnchor.anchor_date == str(yesterday)
+                )
+            )
+            anchor = existing.scalar_one_or_none()
+            if anchor:
+                anchor.merkle_root = root
+                anchor.entry_count = len(entries)
+                anchor.entry_hashes = hashes
+            else:
+                anchor = MerkleAnchor(
+                    anchor_date=str(yesterday),
+                    merkle_root=root,
+                    entry_count=len(entries),
+                    entry_hashes=hashes,
+                )
+                session.add(anchor)
+
+            await session.commit()
+            logger.info(
+                "merkle: anchored %s — %d entries, root=%s",
+                yesterday,
+                len(entries),
+                root[:16] + "...",
+            )
+            return {
+                "date": str(yesterday),
+                "entry_count": len(entries),
+                "merkle_root": root,
+            }
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_compute_merkle_anchor failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_backfill_content_hashes")
+def task_backfill_content_hashes():
+    """One-time task: backfill content_hash for all existing simulation_log entries."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import SimulationLog
+        from simulation.merkle import compute_entry_hash
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(
+                select(SimulationLog)
+                .where(SimulationLog.content_hash.is_(None))
+                .order_by(SimulationLog.id)
+            )
+            entries = result.scalars().all()
+
+            if not entries:
+                logger.info("backfill: all entries already hashed")
+                return {"backfilled": 0}
+
+            for entry in entries:
+                entry.content_hash = compute_entry_hash(
+                    agent_name=entry.agent_name,
+                    event_type=entry.event_type,
+                    event_data=entry.event_data,
+                    created_at=entry.created_at,
+                    thesis_id=entry.thesis_id,
+                )
+
+            await session.commit()
+            logger.info("backfill: hashed %d entries", len(entries))
+            return {"backfilled": len(entries)}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_backfill_content_hashes failed: %s", exc)
         raise

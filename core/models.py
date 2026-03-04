@@ -1,7 +1,7 @@
 """
 EdgeFinder — SQLAlchemy ORM Models
 
-All 36 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
+All 37 database models defined here. Uses SQLAlchemy 2.0 "mapped column" style
 with full type annotations.
 
 PostgreSQL-specific types:
@@ -22,6 +22,7 @@ Models 24-33 (Simulation Engine):
   - PaperPortfolio: simulated play-money portfolio
   - PaperPosition: individual paper positions linked to theses
   - SimulationLog: immutable decision log for agent transparency
+  - MerkleAnchor: daily tamper-evident root hash for log integrity
   - DeepHedgingModel: trained deep hedging policy metadata
   - AgentMemory: long-term agent learning and pattern recognition
 """
@@ -1270,6 +1271,7 @@ class SimulationLog(Base):
     agent_name: Mapped[str] = mapped_column(String(50), nullable=False)
     event_type: Mapped[str] = mapped_column(String(30), nullable=False)  # SimEventType values
     event_data: Mapped[dict | None] = mapped_column(JsonType)
+    content_hash: Mapped[str | None] = mapped_column(String(64))  # SHA-256
 
     thesis: Mapped[SimulatedThesis | None] = relationship(back_populates="simulation_logs")
 
@@ -1278,9 +1280,85 @@ class SimulationLog(Base):
         Index("ix_sim_log_event_type", "event_type", "created_at"),
     )
 
+    @staticmethod
+    def compute_hash(
+        agent_name: str,
+        event_type: str,
+        event_data: dict | None,
+        created_at: datetime,
+        thesis_id: int | None = None,
+    ) -> str:
+        """Deterministic SHA-256 of entry content for Merkle anchoring."""
+        from simulation.merkle import compute_entry_hash
+
+        return compute_entry_hash(
+            agent_name=agent_name,
+            event_type=event_type,
+            event_data=event_data,
+            created_at=created_at,
+            thesis_id=thesis_id,
+        )
+
+
+@sa.event.listens_for(SimulationLog, "before_insert")
+def _set_content_hash(mapper: Any, connection: Any, target: SimulationLog) -> None:
+    """Auto-compute content_hash before every INSERT.
+
+    Also pins created_at if unset so the hash and DB timestamp match.
+    """
+    if target.content_hash is None:
+        from simulation.merkle import compute_entry_hash
+
+        # Pin created_at so hash matches what the DB stores
+        if target.created_at is None:
+            target.created_at = datetime.now(tz=None)
+
+        target.content_hash = compute_entry_hash(
+            agent_name=target.agent_name,
+            event_type=target.event_type,
+            event_data=target.event_data,
+            created_at=target.created_at,
+            thesis_id=target.thesis_id,
+        )
+
 
 # ---------------------------------------------------------------------------
-# 32. DeepHedgingModel — trained hedging policy metadata
+# 32. MerkleAnchor — daily tamper-evident root hash
+# ---------------------------------------------------------------------------
+
+
+class MerkleAnchor(Base):
+    """Daily Merkle root over simulation log entries.
+
+    Each anchor covers one UTC day of SimulationLog entries. The root hash
+    can be published to a blockchain for cryptographic proof that the log
+    existed at that point in time and has not been altered since.
+
+    The chain is the witness, not the warehouse.
+    """
+
+    __tablename__ = "merkle_anchors"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    anchor_date: Mapped[str] = mapped_column(
+        String(10), nullable=False, unique=True
+    )  # YYYY-MM-DD
+    merkle_root: Mapped[str] = mapped_column(String(64), nullable=False)  # SHA-256
+    entry_count: Mapped[int] = mapped_column(Integer, nullable=False)
+    entry_hashes: Mapped[dict | None] = mapped_column(JsonType)  # ordered leaf hashes
+    chain_tx_id: Mapped[str | None] = mapped_column(String(128))  # future: on-chain tx
+
+    __table_args__ = (
+        Index("ix_merkle_anchor_date", "anchor_date"),
+    )
+
+
+# ---------------------------------------------------------------------------
+# 33. DeepHedgingModel — trained hedging policy metadata (was 32)
 # ---------------------------------------------------------------------------
 
 
@@ -1318,7 +1396,7 @@ class DeepHedgingModel(Base):
 
 
 # ---------------------------------------------------------------------------
-# 33. AgentMemory — long-term agent learning and self-improvement
+# 34. AgentMemory — long-term agent learning and self-improvement
 # ---------------------------------------------------------------------------
 
 
@@ -1353,7 +1431,7 @@ class AgentMemory(Base):
 
 
 # ---------------------------------------------------------------------------
-# 34. PromptVersion — versioned system prompts for eval tracking
+# 35. PromptVersion — versioned system prompts for eval tracking
 # ---------------------------------------------------------------------------
 
 
@@ -1380,7 +1458,7 @@ class PromptVersion(Base):
 
 
 # ---------------------------------------------------------------------------
-# 35. PromptEval — performance metrics per prompt version
+# 36. PromptEval — performance metrics per prompt version
 # ---------------------------------------------------------------------------
 
 
@@ -1410,7 +1488,7 @@ class PromptEval(Base):
 
 
 # ---------------------------------------------------------------------------
-# 36. MLModel — trained ML model artifacts with versioned blob storage
+# 37. MLModel — trained ML model artifacts with versioned blob storage
 # ---------------------------------------------------------------------------
 
 

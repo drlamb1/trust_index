@@ -259,6 +259,101 @@ async def api_decision_log(
         ])
 
 
+@router.get("/api/simulation/verify/{log_id}")
+async def api_verify_log_entry(
+    log_id: int,
+    user: User = Depends(get_current_user),
+):
+    """Verify a simulation log entry against its Merkle anchor.
+
+    Returns the entry's content hash, the daily Merkle root, and
+    the proof path. Anyone can independently recompute the hash from
+    the entry data and verify the proof leads to the root.
+    """
+    from sqlalchemy import select
+    from core.database import AsyncSessionLocal
+    from core.models import MerkleAnchor, SimulationLog
+    from simulation.merkle import build_merkle_tree, compute_entry_hash, verify_proof
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(SimulationLog).where(SimulationLog.id == log_id)
+        )
+        entry = result.scalar_one_or_none()
+        if not entry:
+            return JSONResponse({"error": "entry not found"}, status_code=404)
+
+        # Recompute hash to verify integrity
+        recomputed = compute_entry_hash(
+            agent_name=entry.agent_name,
+            event_type=entry.event_type,
+            event_data=entry.event_data,
+            created_at=entry.created_at,
+            thesis_id=entry.thesis_id,
+        )
+
+        entry_date = entry.created_at.strftime("%Y-%m-%d") if entry.created_at else None
+
+        # Find the anchor for this day
+        anchor_result = await session.execute(
+            select(MerkleAnchor).where(MerkleAnchor.anchor_date == entry_date)
+        )
+        anchor = anchor_result.scalar_one_or_none()
+
+        proof = None
+        root_verified = False
+        if anchor and anchor.entry_hashes and entry.content_hash:
+            _, proofs = build_merkle_tree(anchor.entry_hashes)
+            proof = proofs.get(entry.content_hash)
+            if proof is not None:
+                root_verified = verify_proof(
+                    entry.content_hash, proof, anchor.merkle_root
+                )
+
+        return JSONResponse({
+            "log_id": entry.id,
+            "date": entry_date,
+            "content_hash": entry.content_hash,
+            "recomputed_hash": recomputed,
+            "hash_matches": entry.content_hash == recomputed,
+            "merkle_root": anchor.merkle_root if anchor else None,
+            "chain_tx_id": anchor.chain_tx_id if anchor else None,
+            "proof": proof,
+            "root_verified": root_verified,
+            "entry_count": anchor.entry_count if anchor else None,
+        }, default=_json_safe)
+
+
+@router.get("/api/simulation/anchors")
+async def api_merkle_anchors(
+    limit: int = Query(default=30, le=90),
+    user: User = Depends(get_current_user),
+):
+    """List recent Merkle anchors (daily root hashes)."""
+    from sqlalchemy import desc, select
+    from core.database import AsyncSessionLocal
+    from core.models import MerkleAnchor
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(MerkleAnchor)
+            .order_by(desc(MerkleAnchor.anchor_date))
+            .limit(limit)
+        )
+        anchors = result.scalars().all()
+
+        return JSONResponse([
+            {
+                "anchor_date": a.anchor_date,
+                "merkle_root": a.merkle_root,
+                "entry_count": a.entry_count,
+                "chain_tx_id": a.chain_tx_id,
+                "created_at": a.created_at.isoformat() if a.created_at else None,
+            }
+            for a in anchors
+        ], default=_json_safe)
+
+
 @router.get("/api/simulation/memories")
 async def api_memories(
     agent_name: str | None = Query(default=None),
