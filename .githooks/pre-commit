@@ -1,0 +1,14 @@
+#!/usr/bin/env bash
+# Prevent direct commits to main. All changes go through PRs.
+
+branch="$(git rev-parse --abbrev-ref HEAD)"
+
+if [ "$branch" = "main" ]; then
+  echo "ERROR: Direct commits to main are not allowed."
+  echo "Create a feature branch first:"
+  echo "  git checkout -b <type>/<short-name>"
+  echo ""
+  echo "Or start a worktree for parallel work:"
+  echo "  claude 'work in a worktree'"
+  exit 1
+fi
