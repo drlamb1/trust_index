@@ -270,6 +270,11 @@ async def fetch_and_store_insider_trades(
         if not accession_no or not primary_doc:
             continue
 
+        # SEC submissions API returns XSLT-styled paths (e.g. "xslF345X05/form4.xml")
+        # which render as HTML. Strip the prefix to get the raw XML.
+        if "/" in primary_doc:
+            primary_doc = primary_doc.split("/", 1)[1]
+
         # Dedup: skip if any trade with this accession number exists
         existing = await session.execute(
             select(InsiderTrade).where(InsiderTrade.accession_number == accession_no).limit(1)
