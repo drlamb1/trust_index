@@ -188,7 +188,7 @@ railway-deploy-all-3:
 # ── ML Training (local GPU only) ────────────────────────────────────────
 
 ml-worker: up
-	$(PYTHON) -m celery -A scheduler.tasks worker -Q ml_training -c 1 --loglevel=info -n ml_training@%h
+	$(PYTHON) -m celery -A scheduler.tasks worker -Q ml_training -c 1 --loglevel=info --include=ml.worker_signals -n ml_training@%h
 
 ml-train-sentiment:
 	$(PYTHON) -m ml.sentiment.training
