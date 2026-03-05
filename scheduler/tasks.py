@@ -641,8 +641,15 @@ def task_fetch_new_filings(limit_per_ticker: int = 3) -> dict:
         raise
 
 
-@celery_app.task(name="scheduler.tasks.task_aggregate_news")
-def task_aggregate_news(days: int = 7) -> dict:
+@celery_app.task(
+    name="scheduler.tasks.task_aggregate_news",
+    max_retries=1,
+    default_retry_delay=120,
+    acks_late=False,  # don't redeliver on OOM kill — breaks the death loop
+    soft_time_limit=600,  # 10 min cap — don't starve other ingestion tasks
+    time_limit=660,
+)
+def task_aggregate_news(days: int = 1) -> dict:
     """Aggregate news from RSS, Finnhub, and NewsAPI for all active tickers."""
 
     async def _run():
