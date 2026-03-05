@@ -334,6 +334,11 @@ async def fetch_newsapi_articles(
             resp = await client.get(url, params=params)
             resp.raise_for_status()
             data = resp.json()
+    except httpx.HTTPStatusError as exc:
+        if exc.response.status_code == 429:
+            raise  # let caller handle rate limit
+        logger.warning("NewsAPI error for %r: %s", query, exc)
+        return []
     except Exception as exc:
         logger.warning("NewsAPI error for %r: %s", query, exc)
         return []
@@ -404,6 +409,12 @@ async def fetch_newsapi_top_headlines(
                 resp = await client.get(url, params=params)
                 resp.raise_for_status()
                 data = resp.json()
+            except httpx.HTTPStatusError as exc:
+                if exc.response.status_code == 429:
+                    logger.warning("NewsAPI rate limited on top-headlines (%s) — stopping", category)
+                    return articles
+                logger.warning("NewsAPI top-headlines (%s) error: %s", category, exc)
+                continue
             except Exception as exc:
                 logger.warning("NewsAPI top-headlines (%s) error: %s", category, exc)
                 continue
@@ -595,36 +606,50 @@ async def aggregate_news_batch(
         headlines = await fetch_newsapi_top_headlines(api_key=newsapi_key)
         articles.extend(headlines)
 
-    # 4. Finnhub per-ticker (up to 500 tickers at 10 req/s — throttle externally)
+    # 4. Finnhub per-ticker — chunked to avoid OOM from 500+ concurrent requests
+    inserted = 0
     if finnhub_api_key:
-        fh_tasks = [
-            fetch_finnhub_news(t.symbol, days=days, api_key=finnhub_api_key) for t in tickers
-        ]
-        fh_results = await asyncio.gather(*fh_tasks, return_exceptions=True)
-        for ticker, result in zip(tickers, fh_results):
-            if isinstance(result, Exception):
-                logger.warning("Finnhub error for %s: %s", ticker.symbol, result)
-                continue
-            for a in result:
-                a["ticker_ids"] = [ticker.id]
-            articles.extend(result)
+        chunk_size = 50
+        for i in range(0, len(tickers), chunk_size):
+            chunk = tickers[i:i + chunk_size]
+            fh_tasks = [
+                fetch_finnhub_news(t.symbol, days=days, api_key=finnhub_api_key)
+                for t in chunk
+            ]
+            fh_results = await asyncio.gather(*fh_tasks, return_exceptions=True)
+            chunk_articles: list[dict[str, Any]] = []
+            for ticker, result in zip(chunk, fh_results):
+                if isinstance(result, Exception):
+                    logger.warning("Finnhub error for %s: %s", ticker.symbol, result)
+                    continue
+                for a in result:
+                    a["ticker_ids"] = [ticker.id]
+                chunk_articles.extend(result)
+            articles.extend(chunk_articles)
 
-    inserted = await store_news_articles(session, articles, tickers=tickers)
+    inserted += await store_news_articles(session, articles, tickers=tickers)
 
     # 5. NewsAPI per-ticker (rate limited — free tier ~100 req/day).
     #    Top-headlines (step 3) already covers broad news with just 4 calls.
     #    Per-ticker queries are supplementary — cap at 80 tickers per run,
     #    with a 1s delay between calls to stay under the rate limit.
+    #    Bail immediately on 429 to stop wasting quota.
     if newsapi_key:
         newsapi_budget = 80  # reserve ~20 calls for top-headlines + buffer
         for i, ticker in enumerate(tickers[:newsapi_budget]):
             query = f'"{ticker.symbol}"'
-            na = await fetch_newsapi_articles(
-                query=query,
-                ticker_ids=[ticker.id],
-                days=days,
-                api_key=newsapi_key,
-            )
+            try:
+                na = await fetch_newsapi_articles(
+                    query=query,
+                    ticker_ids=[ticker.id],
+                    days=days,
+                    api_key=newsapi_key,
+                )
+            except Exception as exc:
+                if "429" in str(exc):
+                    logger.warning("NewsAPI rate limited at ticker %d/%d — stopping", i + 1, newsapi_budget)
+                    break
+                raise
             inserted += await store_news_articles(session, na, tickers=[ticker])
             if i < newsapi_budget - 1:
                 await asyncio.sleep(1.0)
