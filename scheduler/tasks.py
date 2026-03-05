@@ -199,10 +199,10 @@ celery_app.conf.beat_schedule = {
         "schedule": crontab(minute=0, hour="*/3", day_of_week="1-5"),
         "options": {"queue": "analysis"},
     },
-    # Batch sentiment scoring — hourly at :45 (offset from other jobs)
+    # Batch sentiment scoring — every 30 min (clear backlog faster)
     "score-news-sentiment": {
         "task": "scheduler.tasks.task_run_sentiment_batch",
-        "schedule": crontab(minute=45, hour="*"),
+        "schedule": crontab(minute="15,45"),
         "options": {"queue": "analysis"},
     },
     # Anomaly detection — 45 min after EOD (9:45 PM UTC Mon-Fri)
@@ -333,10 +333,10 @@ celery_app.conf.beat_schedule = {
     # ================================================================
     # EVAL / SELF-LEARNING TASKS
     # ================================================================
-    # Backfill price outcomes on scored news articles — nightly 11:30 PM UTC
+    # Backfill price outcomes on scored news articles — 3x daily
     "backfill-price-outcomes": {
         "task": "scheduler.tasks.task_backfill_price_outcomes",
-        "schedule": crontab(minute=30, hour=23),
+        "schedule": crontab(minute=30, hour="7,15,23"),
         "options": {"queue": "analysis"},
     },
     # Prompt performance eval — Sundays 10:30 PM UTC (after memory consolidation)
@@ -834,7 +834,7 @@ def task_analyze_pending_filings(limit: int = 20) -> dict:
 
 
 @celery_app.task(name="scheduler.tasks.task_run_sentiment_batch")
-def task_run_sentiment_batch(limit: int = 500) -> dict:
+def task_run_sentiment_batch(limit: int = 2000) -> dict:
     """Score unscored news articles using Claude Haiku Batches API."""
 
     async def _run():
@@ -1389,6 +1389,27 @@ def task_generate_theses() -> dict:
             from sqlalchemy import select
             from core.models import SimulatedThesis, ThesisStatus
 
+            # Catch-up: auto-backtest any PROPOSED theses that were never queued
+            from core.models import BacktestRun
+            stale_proposed = await session.execute(
+                select(SimulatedThesis).where(
+                    SimulatedThesis.status == ThesisStatus.PROPOSED.value,
+                ).outerjoin(
+                    BacktestRun, BacktestRun.thesis_id == SimulatedThesis.id,
+                ).where(BacktestRun.id.is_(None))
+            )
+            for thesis in stale_proposed.scalars().all():
+                ticker_id = thesis.ticker_ids[0] if thesis.ticker_ids else None
+                if ticker_id:
+                    task_backtest_thesis.apply_async(
+                        args=[thesis.id, ticker_id],
+                        queue="simulation",
+                    )
+                    logger.info(
+                        "Catch-up: queued backtest for stale PROPOSED thesis %d",
+                        thesis.id,
+                    )
+
             convergences = await detect_signal_convergence(session)
             generated = 0
             skipped = 0
@@ -1416,6 +1437,16 @@ def task_generate_theses() -> dict:
                 thesis = await generate_thesis(session, conv, settings.anthropic_api_key)
                 if thesis:
                     generated += 1
+                    # Auto-queue backtest so theses flow through the lifecycle
+                    await session.flush()  # ensure thesis.id is assigned
+                    task_backtest_thesis.apply_async(
+                        args=[thesis.id, conv["ticker_id"]],
+                        queue="simulation",
+                    )
+                    logger.info(
+                        "Auto-queued backtest for thesis %d (ticker_id=%d)",
+                        thesis.id, conv["ticker_id"],
+                    )
 
             await session.commit()
             return {
@@ -1673,7 +1704,7 @@ def task_backfill_price_outcomes() -> dict:
     async def _run():
         from datetime import timedelta
 
-        from sqlalchemy import and_, select, update
+        from sqlalchemy import and_, func, select, update
 
         from core.database import AsyncSessionLocal
         from core.models import NewsArticle, PriceBar, Ticker
@@ -1690,7 +1721,8 @@ def task_backfill_price_outcomes() -> dict:
                     NewsArticle.sentiment_scored_at < cutoff,
                     NewsArticle.published_at.is_not(None),
                     NewsArticle.ticker_ids.is_not(None),
-                ).limit(500)
+                    func.array_length(NewsArticle.ticker_ids, 1) > 0,
+                ).limit(2000)
             )
             articles = result.scalars().all()
 
@@ -2049,9 +2081,9 @@ def task_train_signal_ranker() -> dict:
         async with AsyncSessionLocal() as session:
             df = await extract_signal_ranker_training_data(session)
 
-            if len(df) < 50:
+            if len(df) < 25:
                 logger.info(
-                    "Signal ranker training skipped: only %d samples (need 50+)",
+                    "Signal ranker training skipped: only %d samples (need 25+)",
                     len(df),
                 )
                 return {"status": "skipped", "reason": f"Only {len(df)} samples"}
