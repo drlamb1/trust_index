@@ -2,6 +2,7 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Analytics } from '@vercel/analytics/react'
 import { useAuthStore } from '@/stores/authStore'
+import { getToken } from '@/lib/api'
 import Layout from '@/components/layout/Layout'
 import Login from '@/pages/Login'
 import Dashboard from '@/pages/Dashboard'
@@ -24,7 +25,8 @@ const queryClient = new QueryClient({
 
 function RequireAuth({ children }: { children: React.ReactNode }) {
   const isAuthenticated = useAuthStore(s => s.isAuthenticated)
-  if (!isAuthenticated) return <Navigate to="/login" replace />
+  const token = getToken() // validates expiry — clears stale tokens before render
+  if (!isAuthenticated || !token) return <Navigate to="/login" replace />
   return <>{children}</>
 }
 
