@@ -70,3 +70,29 @@ make test                     # full suite, ~37s
 make railway-deploy-all-3     # all 3 Railway services
 ```
 Requires Railway CLI linked (`railway status` to verify).
+
+## Coach (Bill Campbell Pattern)
+
+A meta-cognitive coaching layer that sits above the work. Coaches the human AND the AI. Portable across projects.
+
+### Commands
+- `/coach` — General check-in. Reads knowledge base, scans for anti-patterns, gives honest 2-3 sentence assessment
+- `/coach-review` — Before major architecture decisions. Forces simplicity/measurement/reversal-cost thinking
+- `/coach-retro` — At session end or natural boundaries. What shipped, what repeated, what to change
+- `/coach-experiment` — Before experiments. Requires hypothesis, metric, baseline, duration, kill condition
+
+### When to self-invoke
+The AI should apply Coach thinking (without needing the command) when it notices:
+- About to create a new abstraction layer or module
+- Doing something for the third time manually
+- 20+ tool calls without shipping a concrete artifact
+- Writing documentation for something that doesn't exist yet
+- About to add a new dependency
+
+### Files
+- `.claude/commands/coach*.md` — Command definitions (portable)
+- `.claude/coach/knowledge-base.md` — The Ten Practices (portable)
+- `.claude/coach/anti-patterns.md` — Detected patterns (portable, grows)
+- `.claude/coach/intervention-log.md` — Session history (project-specific)
+- `.claude/coach/self-eval.md` — Coach accuracy tracking (portable)
+- `docs/Agentic_Systems_Best_Practices_v3.md` — Full research foundation
