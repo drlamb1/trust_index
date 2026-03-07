@@ -33,6 +33,7 @@ class PersonaConfig:
     tools: list[str] = field(default_factory=list)
     color: str = "#7c85f5"
     icon: str = "A"
+    min_role: str = "viewer"  # minimum role required: "admin", "member", "viewer"
 
 
 # ---------------------------------------------------------------------------
@@ -678,6 +679,7 @@ PERSONAS: dict[str, PersonaConfig] = {
         tools=_PM_TOOLS,
         color="#39d0b8",
         icon="P",
+        min_role="admin",
     ),
     # --- Simulation Engine Personas ---
     "thesis_lord": PersonaConfig(
@@ -730,3 +732,16 @@ PERSONAS: dict[str, PersonaConfig] = {
 
 def get_persona(name: str) -> PersonaConfig:
     return PERSONAS.get(name, PERSONAS["edge"])
+
+
+_ROLE_HIERARCHY = {"admin": 3, "member": 2, "viewer": 1}
+
+
+def get_visible_personas(user_role: str) -> list[str]:
+    """Return persona names visible to this role based on min_role hierarchy."""
+    level = _ROLE_HIERARCHY.get(user_role, 0)
+    return [
+        name
+        for name, cfg in PERSONAS.items()
+        if _ROLE_HIERARCHY.get(cfg.min_role, 0) <= level
+    ]

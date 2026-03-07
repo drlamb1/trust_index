@@ -174,30 +174,42 @@ async def route_message(
     text: str,
     current_persona: str | None = None,
     api_key: str | None = None,
+    user_role: str = "admin",
 ) -> tuple[str, str]:
     """
     Route a user message to the appropriate persona.
 
     Returns:
         (persona_name, cleaned_text) — cleaned_text has @prefix stripped if present.
+
+    The user_role parameter filters out personas the user can't access.
+    If routing resolves to a gated persona, falls back to current or "edge".
     """
+    from chat.personas import get_visible_personas
+
+    visible = set(get_visible_personas(user_role))
+
     # Tier 1: Explicit prefix
     persona, cleaned = _check_prefix(text)
     if persona:
-        logger.debug("Routed via prefix: %s", persona)
-        return persona, cleaned
+        if persona in visible:
+            logger.debug("Routed via prefix: %s", persona)
+            return persona, cleaned
+        logger.debug("Prefix routed to %s but blocked for role %s", persona, user_role)
 
     # Tier 2: Keyword heuristics
     persona = _check_keywords(text)
-    if persona:
+    if persona and persona in visible:
         logger.debug("Routed via keywords: %s", persona)
         return persona, text
 
     # Tier 3: If we have an API key and no current persona, use Haiku
     if api_key and not current_persona:
         persona = await _classify_with_haiku(text, api_key)
-        logger.debug("Routed via Haiku: %s", persona)
-        return persona, text
+        if persona in visible:
+            logger.debug("Routed via Haiku: %s", persona)
+            return persona, text
 
     # Tier 4: Default to current persona or edge
-    return current_persona or "edge", text
+    fallback = current_persona if current_persona in visible else "edge"
+    return fallback, text

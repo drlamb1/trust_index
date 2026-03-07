@@ -9,7 +9,7 @@ import remarkGfm from 'remark-gfm'
 import { useQuery } from '@tanstack/react-query'
 import { Send, ChevronDown, ChevronUp, History, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
+import { PERSONAS } from '@/lib/personas'
 import { streamChat } from '@/lib/sse'
 import { BASE, getToken, chat as chatApi } from '@/lib/api'
 import { timeAgo } from '@/lib/timeAgo'
@@ -220,6 +220,21 @@ export default function Chat() {
   const [confirmNewChat, setConfirmNewChat] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Visible personas for current user's role
+  const { data: visiblePersonas = [] } = useQuery({
+    queryKey: ['chat-personas'],
+    queryFn: chatApi.personas,
+    staleTime: 300_000,
+  })
+  const visibleNames = visiblePersonas.map(p => p.name)
+
+  // Reset activePersona if user doesn't have access (e.g., PM for non-admin)
+  useEffect(() => {
+    if (visibleNames.length > 0 && !visibleNames.includes(activePersona)) {
+      setPersona('edge')
+    }
+  }, [visibleNames.length, activePersona])
+
   // Conversation history
   const { data: conversations = [] } = useQuery({
     queryKey: ['chat-conversations'],
@@ -242,8 +257,8 @@ export default function Chat() {
   // Handle persona from URL param
   useEffect(() => {
     const p = searchParams.get('persona') as PersonaName | null
-    if (p && CHAT_PERSONAS.includes(p)) setPersona(p)
-  }, [])
+    if (p && visibleNames.includes(p)) setPersona(p)
+  }, [visibleNames.length])
 
   // Restore conversation for active persona from localStorage
   useEffect(() => {
@@ -563,8 +578,9 @@ export default function Chat() {
             </span>
           )}
         </button>
-        {CHAT_PERSONAS.map(pName => {
-          const p = PERSONAS[pName]
+        {visiblePersonas.map(vp => {
+          const pName = vp.name
+          const p = PERSONAS[pName] ?? vp
           const isActive = activePersona === pName
           return (
             <button
