@@ -16,7 +16,7 @@
   - `edgefinder` (web) — uvicorn, serves API + SSE streams
   - `edgefinder-worker` — Celery with embedded Beat scheduler, 5 queues
   - `edgefinder-simulation` — Celery worker, dedicated simulation queue
-- **Frontend**: React 19 + TypeScript + Vite on **Vercel** (`trust-index-cyan.vercel.app`)
+- **Frontend**: React 19 + TypeScript + Vite on **Vercel** (`edgefinder-cyan.vercel.app`)
 - **Database**: Neon PostgreSQL (serverless), asyncpg
 - **Cache/Broker**: Upstash Redis (serverless)
 - **Single Dockerfile** — `entrypoint.sh` dispatches via `PROCESS_TYPE` env var

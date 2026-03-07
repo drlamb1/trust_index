@@ -13,7 +13,7 @@
 
 const { chromium } = require('playwright')
 
-const BASE = 'https://trust-index-cyan.vercel.app'
+const BASE = process.env.EF_URL || 'https://edgefinder-cyan.vercel.app'
 const CREDS = { email: 'test@email.com', password: 'screenshot2026' }
 const VIEWPORT = { width: 1536, height: 768 }
 
