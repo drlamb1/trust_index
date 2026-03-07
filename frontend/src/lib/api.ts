@@ -21,6 +21,7 @@ import type {
   User,
   VolSurface,
 } from '@/types/api'
+import { useAuthStore } from '@/stores/authStore'
 
 export const BASE = import.meta.env.VITE_API_URL || ''
 
@@ -28,8 +29,28 @@ export const BASE = import.meta.env.VITE_API_URL || ''
 
 const TOKEN_KEY = 'ef_token'
 
+function isTokenExpired(token: string): boolean {
+  try {
+    const payload = JSON.parse(atob(token.split('.')[1]))
+    return payload.exp * 1000 < Date.now() - 60_000
+  } catch {
+    return true
+  }
+}
+
+/** Clear token + reset auth store → RequireAuth redirects to /login */
+export function forceLogout(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  useAuthStore.getState().logout()
+}
+
 export function getToken(): string | null {
-  return localStorage.getItem(TOKEN_KEY)
+  const token = localStorage.getItem(TOKEN_KEY)
+  if (token && isTokenExpired(token)) {
+    forceLogout()
+    return null
+  }
+  return token
 }
 
 export function setToken(token: string): void {
@@ -55,6 +76,7 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
     headers,
   })
   if (!res.ok) {
+    if (res.status === 401) forceLogout()
     const body = await res.text().catch(() => '')
     throw new Error(`${res.status} ${res.statusText}: ${body}`)
   }
