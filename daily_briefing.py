@@ -147,7 +147,7 @@ async def _fetch_watchlist_movers(session: AsyncSession, days: int = 5) -> list[
 
 def _format_movers(movers: list[dict]) -> str:
     if not movers:
-        return "_No price data available yet. Run: `./ef ingest prices`_\n"
+        return "_No price data available yet. Data syncs automatically during market hours._\n"
 
     gainers = [m for m in movers if m["pct"] > 0][:5]
     losers = [m for m in reversed(movers) if m["pct"] < 0][:5]
@@ -231,7 +231,7 @@ async def _fetch_top_news(session: AsyncSession, hours: int = 24, limit: int = 8
 
 def _format_news(articles: list) -> str:
     if not articles:
-        return "_No scored news in the last 24 hours. Run: `./ef ingest news`_\n"
+        return "_No scored news in the last 24 hours._\n"
 
     lines = [
         "| Sentiment | Score | Headline | Source |",
@@ -358,7 +358,7 @@ async def _fetch_technical_signals(session: AsyncSession) -> list[dict]:
 
 def _format_technical_signals(signals: list[dict]) -> str:
     if not signals:
-        return "_No technical signals. Run: `./ef ingest prices` then compute technicals._\n"
+        return "_No technical signals yet. Computed after market close._\n"
 
     lines = [
         "| Ticker | Signal | Detail |",
@@ -464,7 +464,7 @@ async def _fetch_filing_drift(session: AsyncSession) -> list[dict]:
 
 def _format_filing_drift(rows: list[dict]) -> str:
     if not rows:
-        return "_No 10-K analyses available. Run: `./ef ingest filings --type 10-K --limit 2`_\n"
+        return "_No 10-K analyses available yet._\n"
 
     lines = [
         "| Ticker | Year | Health | Δ | Flags | GM | OpM | RevGrowth | Tone |",
