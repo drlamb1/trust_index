@@ -27,7 +27,7 @@ import jinja2
 from sqlalchemy import func, select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from chat.personas import PERSONAS as PERSONA_CONFIGS, get_persona
+from chat.personas import PERSONAS as PERSONA_CONFIGS, get_persona, get_visible_personas
 from chat.router import route_message
 from chat.tools import TOOL_REGISTRY, execute_tool, get_tools_for_persona
 from core.models import (
@@ -323,8 +323,8 @@ async def chat_turn(
         conv = await _get_or_create_conversation(session, conversation_id)
 
         # 2. Route to persona
-        _ALL_PERSONAS = {"edge", "analyst", "thesis", "pm", "thesis_lord", "vol_slayer", "heston_cal", "deep_hedge", "post_mortem"}
-        if persona_override and persona_override in _ALL_PERSONAS:
+        visible = get_visible_personas(user_role)
+        if persona_override and persona_override in visible:
             persona_name = persona_override
             cleaned_text = user_text
         else:
@@ -332,7 +332,13 @@ async def chat_turn(
                 user_text,
                 current_persona=conv.active_persona,
                 api_key=api_key,
+                user_role=user_role,
             )
+
+        # Enforce persona access (belt-and-suspenders with router filtering)
+        if persona_name not in visible:
+            persona_name = conv.active_persona if conv.active_persona in visible else "edge"
+            cleaned_text = user_text
 
         persona = get_persona(persona_name)
 

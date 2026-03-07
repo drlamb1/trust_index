@@ -10,6 +10,7 @@ import type {
   DailyBriefingResponse,
   HestonParams,
   MacroPulseCard,
+  PersonaInfo,
   PortfolioSummary,
   SimulatedThesis,
   SimulationLog,
@@ -142,6 +143,10 @@ export const simulation = {
 // ─── Chat ───
 
 export const chat = {
+  personas: async (): Promise<PersonaInfo[]> => {
+    const res = await req<{ personas: PersonaInfo[] }>('/api/chat/personas')
+    return res.personas ?? []
+  },
   conversations: async (): Promise<Conversation[]> => {
     const res = await req<{ conversations: Conversation[] }>('/api/chat/conversations')
     return res.conversations ?? []

@@ -3,6 +3,7 @@ EdgeFinder — Chat API Routes
 
 Endpoints:
     POST /api/chat                              → SSE stream (main chat)
+    GET  /api/chat/personas                     → Role-filtered persona list
     GET  /api/chat/conversations                → List conversations
     GET  /api/chat/conversations/{id}/messages   → Message history
     GET  /api/chat/feature-requests              → PM-captured features
@@ -157,6 +158,32 @@ async def get_messages(
     from chat.engine import get_conversation_messages
     msgs = await get_conversation_messages(db, conversation_id, user_id=user.id)
     return JSONResponse({"messages": msgs})
+
+
+# ---------------------------------------------------------------------------
+# Persona list (role-filtered)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/personas")
+async def list_personas(
+    user: User = Depends(get_current_user),
+) -> JSONResponse:
+    """Return personas visible to the current user's role."""
+    from chat.personas import PERSONAS, get_visible_personas
+
+    visible = get_visible_personas(user.role)
+    result = [
+        {
+            "name": cfg.name,
+            "display_name": cfg.display_name,
+            "color": cfg.color,
+            "icon": cfg.icon,
+        }
+        for name, cfg in PERSONAS.items()
+        if name in visible
+    ]
+    return JSONResponse({"personas": result})
 
 
 # ---------------------------------------------------------------------------
