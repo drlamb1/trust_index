@@ -382,7 +382,7 @@ async def _exec_list_capabilities(session: AsyncSession, params: dict) -> dict:
             "Paper portfolio management with backtesting (Monte Carlo block bootstrap)",
             "Institutional holdings with CUSIP-based matching (OpenFIGI + rapidfuzz)",
             "ML pipeline: FinBERT sentiment, XGBoost signal ranker, deep hedging policy",
-            f"Web frontend at trust-index-cyan.vercel.app (dark theme, {len(personas)} persona chat)",
+            f"Web frontend at edgefinder-cyan.vercel.app (dark theme, {len(personas)} persona chat)",
         ],
     }
 
@@ -717,6 +717,58 @@ async def _exec_get_vol_surface(session: AsyncSession, params: dict) -> dict:
         "ticker": ticker_sym, "as_of": _json_safe(surface.as_of),
         "model_type": surface.model_type, "calibration_error": surface.calibration_error,
         "surface_data": surface.surface_data,
+    }
+
+
+async def _exec_get_vol_surface_history(session: AsyncSession, params: dict) -> dict:
+    """Compare current vol surface to a historical snapshot for the same ticker."""
+    from sqlalchemy import desc, select
+    from core.models import Ticker, VolSurface
+    ticker_sym = params.get("ticker", "").upper()
+    days_ago = params.get("days_ago", 7)
+    ticker_r = await session.execute(select(Ticker).where(Ticker.symbol == ticker_sym))
+    ticker = ticker_r.scalar_one_or_none()
+    if not ticker:
+        return {"error": f"Ticker {ticker_sym} not found"}
+    # Latest surface
+    latest_r = await session.execute(
+        select(VolSurface).where(VolSurface.ticker_id == ticker.id)
+        .order_by(desc(VolSurface.as_of)).limit(1)
+    )
+    latest = latest_r.scalar_one_or_none()
+    if not latest:
+        return {"message": f"No vol surface data for {ticker_sym}.", "ticker": ticker_sym}
+    # Historical surface closest to days_ago
+    from datetime import timedelta
+    target_date = latest.as_of - timedelta(days=days_ago)
+    hist_r = await session.execute(
+        select(VolSurface).where(
+            VolSurface.ticker_id == ticker.id,
+            VolSurface.as_of <= target_date,
+        ).order_by(desc(VolSurface.as_of)).limit(1)
+    )
+    historical = hist_r.scalar_one_or_none()
+    if not historical:
+        return {
+            "ticker": ticker_sym,
+            "message": f"No historical surface found {days_ago}+ days before {latest.as_of}.",
+            "current": {"as_of": _json_safe(latest.as_of), "surface_data": latest.surface_data},
+        }
+    return {
+        "ticker": ticker_sym,
+        "current": {
+            "as_of": _json_safe(latest.as_of),
+            "model_type": latest.model_type,
+            "calibration_error": latest.calibration_error,
+            "surface_data": latest.surface_data,
+        },
+        "historical": {
+            "as_of": _json_safe(historical.as_of),
+            "model_type": historical.model_type,
+            "calibration_error": historical.calibration_error,
+            "surface_data": historical.surface_data,
+        },
+        "days_between": (latest.as_of - historical.as_of).days,
     }
 
 
@@ -1709,6 +1761,20 @@ TOOL_REGISTRY: dict[str, ToolDef] = {
         },
         execute=_exec_get_vol_surface,
         personas=["vol_slayer", "analyst", "edge"],
+    ),
+    "get_vol_surface_history": ToolDef(
+        name="get_vol_surface_history",
+        description="Compare current vol surface to a historical snapshot. Shows how skew, term structure, and overall IV levels have shifted over time.",
+        input_schema={
+            "type": "object",
+            "properties": {
+                "ticker": {"type": "string", "description": "Ticker symbol e.g. NVDA"},
+                "days_ago": {"type": "integer", "default": 7, "description": "How many days back to compare against"},
+            },
+            "required": ["ticker"],
+        },
+        execute=_exec_get_vol_surface_history,
+        personas=["vol_slayer"],
     ),
     "get_options_chain_data": ToolDef(
         name="get_options_chain_data",
