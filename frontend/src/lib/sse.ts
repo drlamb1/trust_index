@@ -8,7 +8,7 @@
 //      Uses Bearer token in Authorization header.
 
 import type { ChatSSEEvent, PersonaName } from '@/types/api'
-import { getToken } from '@/lib/api'
+import { getToken, forceLogout } from '@/lib/api'
 
 const BASE = import.meta.env.VITE_API_URL || ''
 
@@ -58,6 +58,7 @@ export async function* streamChat(
   })
 
   if (!res.ok || !res.body) {
+    if (res.status === 401) forceLogout()
     throw new Error(`Chat request failed: ${res.status}`)
   }
 
