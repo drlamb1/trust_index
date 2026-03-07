@@ -433,7 +433,7 @@ async def fetch_sp500_symbols() -> list[dict]:
     url = "https://en.wikipedia.org/wiki/List_of_S%26P_500_companies"
 
     try:
-        headers = {"User-Agent": "Mozilla/5.0 (compatible; EdgeFinder/1.0; +https://github.com/drlamb1/trust_index)"}
+        headers = {"User-Agent": "Mozilla/5.0 (compatible; EdgeFinder/1.0; +https://github.com/drlamb1/edgefinder)"}
         async with httpx.AsyncClient(timeout=30, headers=headers) as client:
             resp = await client.get(url)
             resp.raise_for_status()
