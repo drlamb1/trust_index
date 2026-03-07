@@ -120,7 +120,7 @@ async def chat_stream(
             except Exception as exc:
                 await session.rollback()
                 logger.exception("Chat stream error: %s", exc)
-                yield f"event: error\ndata: {json.dumps({'message': str(exc)})}\n\n"
+                yield f"event: error\ndata: {json.dumps({'message': 'An internal error occurred. Please try again.'})}\n\n"
 
     return StreamingResponse(
         event_generator(),
