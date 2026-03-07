@@ -113,8 +113,11 @@ export default function IntelligenceFeed() {
     return () => { close(); clearTimeout(timeout) }
   }, [])
 
-  const grouped = groupItems(items)
-  const hasOnlySystemEvents = items.length > 0 && items.every(i => isSystemEvent(i.event_type))
+  // Dashboard feed hides system events entirely; Simulation Lab Decision Log has the full view
+  const intelligenceItems = items.filter(i => !isSystemEvent(i.event_type))
+  const systemCount = items.length - intelligenceItems.length
+  const grouped = groupItems(intelligenceItems)
+  const hasOnlySystemEvents = items.length > 0 && intelligenceItems.length === 0
 
   return (
     <div className="glass animate-entry animate-entry-4" style={{ padding: '20px 24px' }}>
@@ -145,6 +148,16 @@ export default function IntelligenceFeed() {
         {items.length === 0 && (
           <div style={{ color: 'var(--color-text-dim)', fontSize: 11, padding: '8px 0' }}>
             {connected ? 'Waiting for agent activity…' : timedOut ? 'Feed unavailable — backend may be starting up.' : 'Connecting to feed…'}
+          </div>
+        )}
+
+        {/* System event count — visible but not polluting the feed */}
+        {systemCount > 0 && intelligenceItems.length > 0 && (
+          <div style={{
+            color: 'var(--color-text-dim)', fontSize: 10, padding: '2px 0', marginBottom: 2,
+            fontFamily: 'var(--font-mono)', opacity: 0.5,
+          }}>
+            {systemCount} system event{systemCount !== 1 ? 's' : ''} hidden · <Link to="/simulation" style={{ color: 'var(--color-text-dim)', textDecoration: 'underline' }}>view in Decision Log</Link>
           </div>
         )}
 
