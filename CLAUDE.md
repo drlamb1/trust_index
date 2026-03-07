@@ -66,6 +66,14 @@ make test                     # full suite, ~37s
 ```
 
 ## Deploying
+
+Deploys are **automatic** on merge to `main`:
+- **Backend (Railway)**: GitHub Actions deploys all 3 services sequentially + health check
+- **Frontend (Vercel)**: Auto-deploys from `main` branch only (PR branches get preview URLs)
+
+PR branches do NOT deploy to production. Vercel gives them preview URLs; Railway only deploys on main.
+
+Manual deploy (emergency only):
 ```
 make railway-deploy-all-3     # all 3 Railway services
 ```

@@ -1,0 +1,45 @@
+name: Deploy
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Railway CLI
+        run: npm install -g @railway/cli
+
+      - name: Deploy web service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service edgefinder
+
+      - name: Deploy worker service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service edgefinder-worker
+
+      - name: Deploy simulation service
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+        run: railway up --service edgefinder-simulation
+
+      - name: Health check
+        run: |
+          echo "Waiting for backend to restart..."
+          sleep 30
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" https://edgefinder-production.up.railway.app/api/auth/me)
+            echo "Attempt $i: HTTP $STATUS"
+            if [ "$STATUS" = "401" ]; then
+              echo "Backend is healthy (401 = auth required = app is running)"
+              exit 0
+            fi
+            sleep 10
+          done
+          echo "Backend health check failed"
+          exit 1
