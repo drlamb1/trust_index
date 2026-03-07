@@ -13,12 +13,13 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, EmailStr
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.dependencies import get_current_user, require_role
+from api.rate_limit import limiter
 from config.settings import settings
 from core.database import get_db
 from core.models import User
@@ -63,7 +64,9 @@ class UserResponse(BaseModel):
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED)
+@limiter.limit("3/hour")
 async def register(
+    request: Request,
     body: RegisterRequest,
     db: AsyncSession = Depends(get_db),
 ) -> dict:
@@ -105,7 +108,9 @@ async def register(
 
 
 @router.post("/login")
+@limiter.limit("5/minute")
 async def login(
+    request: Request,
     body: LoginRequest,
     response: Response,
     db: AsyncSession = Depends(get_db),
@@ -195,7 +200,9 @@ class ChangePasswordRequest(BaseModel):
 
 
 @router.post("/change-password")
+@limiter.limit("5/minute")
 async def change_password(
+    request: Request,
     body: ChangePasswordRequest,
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

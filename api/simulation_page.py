@@ -150,6 +150,11 @@ const AGENT_COLORS = {
     lifecycle_review: '#8b949e',
 };
 
+function esc(s) {
+    const d = document.createElement('div');
+    d.textContent = String(s);
+    return d.innerHTML;
+}
 function fmt(n, d=2) { return n != null ? Number(n).toFixed(d) : '—'; }
 function pct(n) { return n != null ? (n >= 0 ? '+' : '') + (n*100).toFixed(1) + '%' : '—'; }
 function pnlClass(n) { return n > 0 ? 'val-up' : n < 0 ? 'val-dn' : ''; }
@@ -186,11 +191,11 @@ async function loadTheses() {
         $('#theses-cards').innerHTML = theses.map(t => `
             <div class="card">
                 <div style="display:flex;justify-content:space-between;align-items:center">
-                    <h4>${t.name}</h4>
-                    <span class="status status-${t.status}">${t.status.replace('_',' ')}</span>
+                    <h4>${esc(t.name)}</h4>
+                    <span class="status status-${esc(t.status)}">${esc(t.status.replace('_',' '))}</span>
                 </div>
-                <div style="font-size:11px;color:var(--muted);margin:4px 0">${t.thesis_text || ''}</div>
-                <div style="font-size:10px;color:var(--muted)">${ago(t.created_at)} &middot; by ${t.generated_by}</div>
+                <div style="font-size:11px;color:var(--muted);margin:4px 0">${esc(t.thesis_text || '')}</div>
+                <div style="font-size:10px;color:var(--muted)">${ago(t.created_at)} &middot; by ${esc(t.generated_by)}</div>
             </div>
         `).join('');
     } catch(e) { $('#theses-cards').innerHTML = '<div class="loading">Could not load theses</div>'; }
@@ -207,9 +212,9 @@ async function loadPortfolio() {
         let html = '<table><tr><th>Ticker</th><th>Thesis</th><th>Side</th><th>Shares</th><th>Entry</th><th>Current</th><th>P&L</th><th>Stop/TP</th></tr>';
         for (const p of d.positions) {
             html += `<tr>
-                <td><strong>${p.ticker}</strong></td>
-                <td style="font-size:11px">${p.thesis}</td>
-                <td>${p.side}</td>
+                <td><strong>${esc(p.ticker)}</strong></td>
+                <td style="font-size:11px">${esc(p.thesis)}</td>
+                <td>${esc(p.side)}</td>
                 <td>${p.shares}</td>
                 <td>$${fmt(p.entry_price)}</td>
                 <td>$${fmt(p.current_price)}</td>
@@ -231,9 +236,9 @@ async function loadMemories() {
         const icons = {insight:'\\u{1F4A1}', pattern:'\\u{1F504}', failure:'\\u26A0\\uFE0F', success:'\\u2705'};
         $('#memories-list').innerHTML = mems.map(m => `
             <div class="memory-card">
-                <div class="type">${icons[m.memory_type]||''} ${m.memory_type}</div>
-                <div class="content">${m.content}</div>
-                <div class="confidence">Confidence: ${(m.confidence*100).toFixed(0)}% &middot; Agent: ${m.agent_name} &middot; Accessed ${m.access_count}x</div>
+                <div class="type">${icons[m.memory_type]||''} ${esc(m.memory_type)}</div>
+                <div class="content">${esc(m.content)}</div>
+                <div class="confidence">Confidence: ${(m.confidence*100).toFixed(0)}% &middot; Agent: ${esc(m.agent_name)} &middot; Accessed ${m.access_count}x</div>
             </div>
         `).join('');
     } catch(e) { $('#memories-list').innerHTML = '<div class="loading">Could not load memories</div>'; }
@@ -249,7 +254,7 @@ function connectFeed() {
             const color = AGENT_COLORS[d.agent] || '#8b949e';
             const item = document.createElement('div');
             item.className = 'feed-item';
-            item.innerHTML = `<span class="agent" style="color:${color}">${d.agent}</span> ${d.event_type} <span class="time">${ago(d.created_at)}</span>`;
+            item.innerHTML = `<span class="agent" style="color:${color}">${esc(d.agent)}</span> ${esc(d.event_type)} <span class="time">${ago(d.created_at)}</span>`;
             feed.prepend(item);
             if (feed.children.length > 50) feed.lastChild.remove();
         };

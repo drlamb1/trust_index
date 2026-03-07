@@ -18,18 +18,16 @@ from datetime import date, datetime, timezone
 from fastapi import Depends, FastAPI, Query, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import HTMLResponse, JSONResponse, PlainTextResponse, RedirectResponse
-from slowapi import Limiter, _rate_limit_exceeded_handler
+from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
 
 from api.dependencies import get_optional_user
+from api.rate_limit import limiter
 from api.simulation_routes import router as simulation_router
 from config.settings import settings
 from core.models import User
 
 logger = logging.getLogger(__name__)
-
-limiter = Limiter(key_func=get_remote_address)
 
 
 # ---------------------------------------------------------------------------
@@ -1286,6 +1284,19 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    # Security headers
+    @app.middleware("http")
+    async def add_security_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+        if settings.is_production:
+            response.headers["Strict-Transport-Security"] = (
+                "max-age=31536000; includeSubDomains"
+            )
+        return response
+
     # Routers
     from api.admin_routes import router as admin_router
     from api.auth_routes import router as auth_router
@@ -1384,8 +1395,8 @@ def create_app() -> FastAPI:
             async with AsyncSessionLocal() as session:
                 content_md = await generate_briefing(session, for_date=for_date)
         except Exception as exc:
-            logger.exception("Briefing generation failed")
-            content_md = f"Error generating briefing: {exc}"
+            logger.exception("Briefing generation failed: %s", exc)
+            content_md = "Error generating briefing. Please try again later."
 
         return HTMLResponse(_briefing_page(content_md, for_date, user=user))
 

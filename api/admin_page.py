@@ -303,6 +303,12 @@ def admin_page_html(current_user_id: int, current_username: str) -> str:
 <script>
 const CURRENT_USER_ID = {current_user_id};
 
+function esc(s) {{
+  const d = document.createElement('div');
+  d.textContent = String(s);
+  return d.innerHTML;
+}}
+
 // ── Toast ─────────────────────────────────────────────────────────────
 function showToast(msg, type) {{
   const t = document.getElementById('toast');
@@ -355,16 +361,16 @@ function renderTable(users) {{
       : `<button class="action-btn" onclick="toggleActive(${{u.id}},false)">Activate</button>`;
 
     html += `<tr>
-      <td>${{u.username}}${{youBadge}}</td>
-      <td style="color:var(--text-dim)">${{u.email}}</td>
-      <td><span class="role-badge ${{roleCls}}">${{u.role}}</span></td>
+      <td>${{esc(u.username)}}${{youBadge}}</td>
+      <td style="color:var(--text-dim)">${{esc(u.email)}}</td>
+      <td><span class="role-badge ${{roleCls}}">${{esc(u.role)}}</span></td>
       <td><span class="status-dot ${{statusCls}}"></span>${{statusText}}</td>
       <td class="mono">${{(u.tokens_used_today||0).toLocaleString()}}</td>
       <td class="actions-cell">
         <button class="action-btn" onclick='openEdit(${{JSON.stringify(u)}})'>Edit</button>
-        <button class="action-btn" onclick="openResetPassword(${{u.id}},'${{u.username}}')">Password</button>
+        <button class="action-btn" onclick="openResetPassword(${{u.id}},&quot;${{esc(u.username)}}&quot;)">Password</button>
         ${{toggleBtn}}
-        <button class="action-btn danger" onclick="deleteUser(${{u.id}},'${{u.username}}')" ${{isMe?'disabled':''}}>Delete</button>
+        <button class="action-btn danger" onclick="deleteUser(${{u.id}},&quot;${{esc(u.username)}}&quot;)" ${{isMe?'disabled':''}}>Delete</button>
       </td>
     </tr>`;
   }}
