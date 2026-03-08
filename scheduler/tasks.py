@@ -569,9 +569,22 @@ def task_compute_technicals_batch() -> dict:
         async with AsyncSessionLocal() as session:
             result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
+            logger.info("compute_technicals_batch: processing %d active tickers", len(tickers))
             results = await compute_technicals_batch(session, list(tickers))
             total = sum(results.values())
-            return {"total_tickers": len(tickers), "total_snapshots": total}
+            zero_tickers = [k for k, v in results.items() if v == 0]
+            if zero_tickers:
+                logger.warning(
+                    "compute_technicals_batch: %d tickers produced 0 snapshots: %s",
+                    len(zero_tickers),
+                    zero_tickers[:10],
+                )
+            logger.info(
+                "compute_technicals_batch: done — %d tickers, %d total snapshots",
+                len(tickers),
+                total,
+            )
+            return {"total_tickers": len(tickers), "total_snapshots": total, "zero_tickers": len(zero_tickers)}
 
     try:
         return run_async(_run())

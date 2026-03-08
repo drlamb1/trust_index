@@ -38,10 +38,18 @@ export default function VolSurfaceHeatmap({ ticker }: { ticker: string }) {
     )
   }
 
+  // Convert year fractions to human-readable tenor labels
+  const yearFractionToTenor = (yf: number): string => {
+    const days = Math.round(yf * 365)
+    if (days <= 7) return `${days}d`
+    if (days <= 45) return `${Math.round(days / 7)}w`
+    if (days <= 335) return `${Math.round(days / 30)}m`
+    return `${yf.toFixed(1)}y`
+  }
+
   // Transform into Nivo HeatMap format — use null for missing cells
-  // Abbreviate expiry labels: "30d" instead of full
   const heatmapData = expiries.map((exp, i) => ({
-    id: `${exp}d`,
+    id: yearFractionToTenor(exp),
     data: moneyness.map((m, j) => ({
       x: `${(m * 100).toFixed(0)}%`,
       y: ivs[i]?.[j] ?? null,

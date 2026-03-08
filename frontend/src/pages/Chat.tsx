@@ -9,7 +9,8 @@ import remarkGfm from 'remark-gfm'
 import { useQuery } from '@tanstack/react-query'
 import { Send, ChevronDown, ChevronUp, History, Plus } from 'lucide-react'
 import { useAuthStore } from '@/stores/authStore'
-import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
+import { PERSONAS } from '@/lib/personas'
+import { useVisiblePersonas } from '@/lib/useVisiblePersonas'
 import { streamChat } from '@/lib/sse'
 import { BASE, getToken, chat as chatApi } from '@/lib/api'
 import { timeAgo } from '@/lib/timeAgo'
@@ -221,14 +222,7 @@ export default function Chat() {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   // Visible personas for current user's role (falls back to static list if API unavailable)
-  const fallbackPersonas = CHAT_PERSONAS.map(name => PERSONAS[name])
-  const { data: visiblePersonas } = useQuery({
-    queryKey: ['chat-personas'],
-    queryFn: chatApi.personas,
-    staleTime: 300_000,
-  })
-  const activePersonaList = visiblePersonas && visiblePersonas.length > 0 ? visiblePersonas : fallbackPersonas
-  const visibleNames = activePersonaList.map(p => p.name)
+  const { names: visibleNames, personas: activePersonaList } = useVisiblePersonas()
 
   // Reset activePersona if user doesn't have access (e.g., PM for non-admin)
   useEffect(() => {

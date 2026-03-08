@@ -373,8 +373,29 @@ async def chat_turn(
         client = anthropic.AsyncAnthropic(api_key=api_key)
         tool_defs = get_tools_for_persona(persona_name, user_role=user_role)
 
-        # Build system prompt — add viewer restriction if applicable
+        # Build system prompt — inject role-filtered specialist directory
         system_text = persona.system_prompt
+        if "{specialist_directory}" in system_text:
+            visible = get_visible_personas(user_role)
+            _directory_desc = {
+                "analyst": "Deep-dive data: filings, technicals, sentiment, earnings, briefings",
+                "thesis": 'Creative strategy ideation, contrarian frameworks, "what if" thinking',
+                "pm": "Product vision, feature strategy, roadmap thinking",
+                "thesis_lord": "Thesis lifecycle: generate, backtest, paper trade, kill",
+                "vol_slayer": "IV surfaces, skew, options pricing (warning: he thinks he's Trogdor)",
+                "heston_cal": "Stochastic vol models, Monte Carlo, calibration",
+                "deep_hedge": "Neural hedging experiments",
+                "post_mortem": "Forensic analysis of dead theses, institutional memory",
+            }
+            lines = [
+                f"- @{n} — {_directory_desc.get(n, PERSONA_CONFIGS[n].display_name)}"
+                for n in visible if n != persona_name
+            ]
+            directory_block = (
+                "SPECIALIST DIRECTORY — recommend these when the user genuinely needs depth:\n"
+                + "\n".join(lines)
+            ) if lines else ""
+            system_text = system_text.replace("{specialist_directory}", directory_block)
         if user_role == "viewer":
             system_text += (
                 "\n\n[VIEWER MODE] This user has viewer-level access. "

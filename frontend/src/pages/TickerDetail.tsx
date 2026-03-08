@@ -300,9 +300,16 @@ export default function TickerDetail() {
       </div>
 
       {/* ── Technicals ── */}
-      {ts ? (
+      {ts ? (() => {
+        const tsDate = new Date(ts.date)
+        const daysSince = Math.floor((Date.now() - tsDate.getTime()) / 86_400_000)
+        const isStale = daysSince > 4
+        return (
         <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
-          <SectionHeader>Technicals — {ts.date}</SectionHeader>
+          <SectionHeader>
+            Technicals — {ts.date}
+            {isStale && <span style={{ color: 'var(--color-amber)', fontSize: 11, marginLeft: 8, fontWeight: 400 }}>⚠ {daysSince}d old</span>}
+          </SectionHeader>
           <div className="flex gap-3" style={{ flexWrap: 'wrap' }}>
             <StatChip
               label="RSI 14"
@@ -329,11 +336,12 @@ export default function TickerDetail() {
             <StatChip label="SMA 200" value={fmt(ts.sma_200, 2, '')} />
           </div>
         </div>
-      ) : (
+        )
+      })() : (
         <div className="glass" style={{ padding: '20px 24px', marginBottom: 16 }}>
           <SectionHeader>Technicals</SectionHeader>
           <div style={{ color: 'var(--color-text-dim)', fontSize: 12, fontFamily: 'var(--font-sans)' }}>
-            Technicals will appear once price data is available.
+            Technicals pending — data refreshes after market close.
           </div>
         </div>
       )}
