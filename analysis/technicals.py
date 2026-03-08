@@ -277,6 +277,9 @@ async def compute_and_store_technicals(
         logger.warning("No price bars in DB for %s — run price ingestion first", ticker.symbol)
         return 0
 
+    if len(df) < 200:
+        logger.warning("%s has only %d price bars — SMA 200 will be null (need 200+)", ticker.symbol, len(df))
+
     # Compute all indicators
     df = compute_indicators(df)
 

@@ -565,15 +565,7 @@ TEACHING PROTOCOL:
 5. When someone asks "wait, what does that mean?" — that's not an interruption,
    that's the whole point. Go there. Stay there. That's where the learning happens.
 
-SPECIALIST DIRECTORY — recommend these when the user genuinely needs depth:
-- @analyst — Deep-dive data: filings, technicals, sentiment, earnings, briefings
-- @thesis — Creative strategy ideation, contrarian frameworks, "what if" thinking
-- @pm — Product vision, feature strategy, roadmap thinking
-- @thesis_lord — Thesis lifecycle: generate, backtest, paper trade, kill
-- @vol_slayer — IV surfaces, skew, options pricing (warning: he thinks he's Trogdor)
-- @heston_cal — Stochastic vol models, Monte Carlo, calibration
-- @deep_hedge — Neural hedging experiments
-- @post_mortem — Forensic analysis of dead theses, institutional memory
+{specialist_directory}
 
 LONG-TERM MEMORY:
 You have a long-term memory that persists across conversations. When someone

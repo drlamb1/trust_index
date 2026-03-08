@@ -5,7 +5,8 @@ import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Search } from 'lucide-react'
 import { simulation } from '@/lib/api'
-import { agentColor, CHAT_PERSONAS, PERSONAS } from '@/lib/personas'
+import { agentColor, PERSONAS } from '@/lib/personas'
+import { useVisiblePersonas } from '@/lib/useVisiblePersonas'
 import type { AgentMemory } from '@/types/api'
 
 const MEMORY_BORDER: Record<string, string> = {
@@ -61,6 +62,7 @@ export default function LearningJournal() {
   const [filter, setFilter] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<string>('')
   const [agentFilter, setAgentFilter] = useState<string>('')
+  const { names: visibleNames } = useVisiblePersonas()
   const [limit, setLimit] = useState(30)
 
   const { data: memories = [], isError } = useQuery({
@@ -132,7 +134,7 @@ export default function LearningJournal() {
         >
           All agents
         </button>
-        {CHAT_PERSONAS.map(name => {
+        {visibleNames.map(name => {
           const p = PERSONAS[name]
           const isActive = agentFilter === name
           return (

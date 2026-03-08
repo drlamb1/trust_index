@@ -4,12 +4,14 @@
 import { useState } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
 import { Send } from 'lucide-react'
+import { useVisiblePersonas } from '@/lib/useVisiblePersonas'
 
 const EDGE_COLOR = '#ff4f81'
 
 export default function AgentConsole() {
   const navigate = useNavigate()
   const [message, setMessage] = useState('')
+  const { count: personaCount } = useVisiblePersonas()
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault()
@@ -79,7 +81,7 @@ export default function AgentConsole() {
           textDecoration: 'none',
         }}
       >
-        All 9 personas available in full chat →
+        All {personaCount} personas available in full chat →
       </Link>
     </div>
   )

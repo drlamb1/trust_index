@@ -2,7 +2,8 @@
 // Static content, no API calls. Accessible from sidebar.
 
 import { Link } from 'react-router-dom'
-import { PERSONAS, CHAT_PERSONAS } from '@/lib/personas'
+import { PERSONAS } from '@/lib/personas'
+import { useVisiblePersonas } from '@/lib/useVisiblePersonas'
 
 const EDGE_COLOR = '#ff4f81'
 
@@ -19,6 +20,8 @@ const PERSONA_DESCRIPTIONS: Record<string, string> = {
 }
 
 export default function Guide() {
+  const { names: visibleNames, count: personaCount } = useVisiblePersonas()
+
   return (
     <div style={{ maxWidth: 780 }} className="animate-entry">
       {/* Hero */}
@@ -42,7 +45,7 @@ export default function Guide() {
         </h1>
 
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: 14, color: 'var(--color-text-muted)', lineHeight: 1.8, marginBottom: 12 }}>
-          You just walked into a market intelligence lab staffed by 9 AI specialists who never sleep,
+          You just walked into a market intelligence lab staffed by {personaCount} AI specialists who never sleep,
           never panic-sell, and never take your stock tips personally. They analyze markets, build
           investment theses, test them with simulated money, and learn from their mistakes.
         </p>
@@ -127,7 +130,7 @@ export default function Guide() {
         </p>
 
         <div className="flex flex-col gap-2">
-          {CHAT_PERSONAS.map(name => {
+          {visibleNames.map(name => {
             const desc = PERSONA_DESCRIPTIONS[name]
             const p = PERSONAS[name]
             return (
@@ -183,7 +186,7 @@ export default function Guide() {
           {[
             { name: 'Dashboard', desc: 'Your home base. Market Pulse shows macro data (fed funds, yields, CPI). The Thesis Constellation maps active theses as a force-directed graph. The Intelligence Feed streams real-time agent activity.' },
             { name: 'Simulation Lab', desc: 'The engine room. Heston model calibrations, paper portfolio positions, volatility surfaces. Everything the autonomous agents are doing under the hood.' },
-            { name: 'Agent Chat', desc: 'Where you talk to the 9 personas. Each one has its own conversation thread. Switch tabs to switch specialists. They share context and suggest handoffs.' },
+            { name: 'Agent Chat', desc: `Where you talk to the ${personaCount} personas. Each one has its own conversation thread. Switch tabs to switch specialists. They share context and suggest handoffs.` },
             { name: 'Learning Journal', desc: 'Institutional memory. Insights, patterns, failures, and successes that the agents have extracted from their work. Searchable and filterable.' },
             { name: 'Daily Briefing', desc: 'A generated market summary covering macro conditions, active theses, recent agent activity, and anything worth watching today.' },
           ].map(({ name, desc }) => (

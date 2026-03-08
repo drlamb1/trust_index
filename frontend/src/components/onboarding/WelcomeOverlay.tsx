@@ -3,6 +3,7 @@
 
 import { useNavigate } from 'react-router-dom'
 import { MessageSquare, Zap, BookOpenCheck } from 'lucide-react'
+import { useVisiblePersonas } from '@/lib/useVisiblePersonas'
 
 const EDGE_COLOR = '#ff4f81'
 
@@ -12,6 +13,7 @@ interface Props {
 
 export default function WelcomeOverlay({ onDismiss }: Props) {
   const navigate = useNavigate()
+  const { count: personaCount } = useVisiblePersonas()
 
   const actions = [
     {
@@ -40,7 +42,7 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
     {
       icon: BookOpenCheck,
       label: 'Read the Guide',
-      desc: 'Meet all 9 personas and see what they do.',
+      desc: `Meet all ${personaCount} personas and see what they do.`,
       color: 'var(--color-cyan)',
       bg: 'hsl(185 72% 48% / 0.1)',
       borderColor: 'hsl(185 72% 48% / 0.25)',
@@ -88,7 +90,7 @@ export default function WelcomeOverlay({ onDismiss }: Props) {
           Welcome to EdgeFinder
         </h1>
         <p style={{ fontFamily: 'var(--font-sans)', fontSize: 13, color: 'var(--color-text-muted)', lineHeight: 1.7, marginBottom: 24 }}>
-          You've got 9 AI agents who live here. They analyze markets, build theses, test them
+          You've got {personaCount} AI agents who live here. They analyze markets, build theses, test them
           with simulated money, and learn from their mistakes. I'm The Edger — your front door.
           Where do you want to start?
         </p>
