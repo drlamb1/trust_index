@@ -295,6 +295,43 @@ class PriceBar(Base):
 
 
 # ---------------------------------------------------------------------------
+# 2b. IntradayBar — intraday OHLCV (hourly resolution for watchlist tickers)
+# ---------------------------------------------------------------------------
+
+
+class IntradayBar(Base):
+    __tablename__ = "intraday_bars"
+
+    id: Mapped[int] = mapped_column(
+        BigInteger().with_variant(Integer(), "sqlite"),
+        primary_key=True,
+        autoincrement=True,
+    )
+    ticker_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("tickers.id", ondelete="CASCADE"), nullable=False
+    )
+    timestamp: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    interval: Mapped[str] = mapped_column(String(5), nullable=False)  # "1h", "15m"
+
+    open: Mapped[float | None] = mapped_column(Float)
+    high: Mapped[float | None] = mapped_column(Float)
+    low: Mapped[float | None] = mapped_column(Float)
+    close: Mapped[float] = mapped_column(Float, nullable=False)
+    volume: Mapped[int | None] = mapped_column(BigInteger)
+
+    source: Mapped[str] = mapped_column(String(50), default="yfinance")
+
+    __table_args__ = (
+        UniqueConstraint(
+            "ticker_id", "timestamp", "interval",
+            name="uq_intraday_bars_ticker_ts_interval",
+        ),
+        Index("ix_intraday_bars_ticker_ts", "ticker_id", "timestamp"),
+        Index("ix_intraday_bars_timestamp", "timestamp"),
+    )
+
+
+# ---------------------------------------------------------------------------
 # 3. TechnicalSnapshot — computed indicators per ticker per day
 # ---------------------------------------------------------------------------
 

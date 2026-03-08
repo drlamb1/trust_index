@@ -86,6 +86,8 @@ celery_app.conf.update(
         "scheduler.tasks.task_run_thesis_matching": {"queue": "analysis"},
         "scheduler.tasks.task_db_keepalive": {"queue": "analysis"},
         "scheduler.tasks.task_fetch_macro_data": {"queue": "ingestion"},
+        "scheduler.tasks.task_fetch_fundamentals_batch": {"queue": "ingestion"},
+        "scheduler.tasks.task_fetch_intraday_batch": {"queue": "ingestion"},
         "scheduler.tasks.task_fetch_transcripts": {"queue": "ingestion"},
         "scheduler.tasks.task_analyze_transcripts": {"queue": "analysis"},
         "scheduler.tasks.task_run_alert_engine": {"queue": "alerts"},
@@ -124,10 +126,16 @@ celery_app.conf.beat_schedule = {
     # ================================================================
     # INGESTION QUEUE
     # ================================================================
-    # Intraday price refresh — every 15 min Mon-Fri 2:30-9 PM UTC (9:30 AM-4 PM EST)
-    "fetch-intraday-prices": {
-        "task": "scheduler.tasks.task_fetch_prices_batch",
-        "schedule": crontab(minute="*/15", hour="14-21", day_of_week="1-5"),
+    # Intraday hourly bars — 3x during market hours for watchlist tickers only
+    # ~10 AM, 1 PM, 4:30 PM EST (15:00, 18:00, 21:30 UTC)
+    "fetch-intraday-bars": {
+        "task": "scheduler.tasks.task_fetch_intraday_batch",
+        "schedule": crontab(minute=0, hour="15,18", day_of_week="1-5"),
+        "options": {"queue": "ingestion"},
+    },
+    "fetch-intraday-bars-close": {
+        "task": "scheduler.tasks.task_fetch_intraday_batch",
+        "schedule": crontab(minute=30, hour=21, day_of_week="1-5"),
         "options": {"queue": "ingestion"},
     },
     # EOD price confirmation — 9 PM UTC (4 PM EST) Mon-Fri
@@ -176,6 +184,13 @@ celery_app.conf.beat_schedule = {
     "fetch-macro-data": {
         "task": "scheduler.tasks.task_fetch_macro_data",
         "schedule": crontab(minute=30, hour=6),
+        "options": {"queue": "ingestion"},
+    },
+    # Fundamental metrics (yfinance) — daily at 7 AM UTC
+    # TTM valuation/profitability/growth metrics for thesis matching
+    "fetch-fundamentals": {
+        "task": "scheduler.tasks.task_fetch_fundamentals_batch",
+        "schedule": crontab(minute=0, hour=7),
         "options": {"queue": "ingestion"},
     },
     # Earnings transcripts — daily at 7:30 AM UTC (after earnings calendar sync)
@@ -414,6 +429,7 @@ def task_fetch_prices(self, ticker_id: int, days: int = 1) -> dict:
             if not ticker:
                 return {"error": f"Ticker {ticker_id} not found"}
             count = await fetch_and_store_prices(session, ticker, days=days)
+            await session.commit()
             return {"ticker_id": ticker_id, "rows_upserted": count}
 
     try:
@@ -438,6 +454,7 @@ def task_fetch_prices_batch(days: int = 1) -> dict:
             result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
             results = await fetch_and_store_prices_batch(session, list(tickers), days=days)
+            await session.commit()
             return {"total_tickers": len(tickers), "results": results}
 
     try:
@@ -546,6 +563,7 @@ def task_compute_technicals(ticker_id: int) -> dict:
             if not ticker:
                 return {"error": f"Ticker {ticker_id} not found"}
             count = await compute_and_store_technicals(session, ticker)
+            await session.commit()
             return {"ticker_id": ticker_id, "snapshots": count}
 
     try:
@@ -570,6 +588,7 @@ def task_compute_technicals_batch() -> dict:
             result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
             tickers = result.scalars().all()
             results = await compute_technicals_batch(session, list(tickers))
+            await session.commit()
             total = sum(results.values())
             return {"total_tickers": len(tickers), "total_snapshots": total}
 
@@ -964,6 +983,7 @@ def task_run_thesis_matching() -> dict:
 
         async with AsyncSessionLocal() as session:
             total = await run_thesis_matching(session)
+            await session.commit()
             return {"matches_upserted": total}
 
     try:
@@ -997,6 +1017,52 @@ def task_fetch_macro_data(days: int = 365) -> dict:
         return run_async(_run())
     except Exception as exc:
         logger.error("task_fetch_macro_data failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_fetch_fundamentals_batch")
+def task_fetch_fundamentals_batch() -> dict:
+    """Fetch fundamental financial metrics (yfinance) for all active tickers."""
+
+    async def _run():
+        from sqlalchemy import select
+
+        from core.database import AsyncSessionLocal
+        from core.models import Ticker
+        from ingestion.fundamentals import fetch_and_store_fundamentals_batch
+
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(Ticker).where(Ticker.is_active.is_(True)))
+            tickers = result.scalars().all()
+            results = await fetch_and_store_fundamentals_batch(session, list(tickers))
+            await session.commit()
+            total = sum(results.values())
+            return {"total_tickers": len(tickers), "total_metrics": total}
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_fundamentals_batch failed: %s", exc)
+        raise
+
+
+@celery_app.task(name="scheduler.tasks.task_fetch_intraday_batch")
+def task_fetch_intraday_batch() -> dict:
+    """Fetch intraday hourly bars for watchlist tickers (yfinance, free)."""
+
+    async def _run():
+        from core.database import AsyncSessionLocal
+        from ingestion.intraday import fetch_and_store_intraday_batch
+
+        async with AsyncSessionLocal() as session:
+            result = await fetch_and_store_intraday_batch(session)
+            await session.commit()
+            return result
+
+    try:
+        return run_async(_run())
+    except Exception as exc:
+        logger.error("task_fetch_intraday_batch failed: %s", exc)
         raise
 
 
